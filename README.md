@@ -1,0 +1,57 @@
+# WoW Pet Training+
+
+A replacement for the hunter **Beast Training** window in WoW: Forever (Interface 16001).
+
+## What it does
+
+- **One line per pet skill, all ranks together.** Each rank is a small pill:
+  gold = you know it, green = your current pet has it, bright edge = trainable right now,
+  red = you have not learned it, grey = not seen yet.
+- **Your pet at a glance.** Name, level, family, free training points, and for every skill
+  whether this pet has it, can learn it, or its family can't.
+- **Learn Log.** At the moment the game says "You have learned a new spell", Pet Training+ writes down
+  the skill and rank, the creature your pet was tamed from (name, level, NPC ID, where it was tamed and when),
+  your pet's name and level, and where you were. Tames are logged too, with what the beast knew.
+- **Takes the place of Beast Training.** When you cast Beast Training, the Blizzard window is made invisible
+  and Pet Training+ sits on top of it. Pick a rank marked Trainable and press the Train button twice:
+  the first press selects the rank, the second trains it.
+
+- **Forever Bestiary link.** Right-click any skill (its line, a rank box, a rank row or a log entry), or use
+  **View in Bestiary**, to open that ability in Forever Bestiary (Pet Hunter) exactly as if you had clicked it in its
+  Abilities tab: every rank and the beasts that teach it. Needs Forever Bestiary (Pet Hunter) loaded.
+
+## Commands
+
+- `/ptp`: open or close the window
+- `/ptp log`: open the Learn Log
+- `/ptp origin`: for a pet tamed before you installed this, target a beast of the same kind and use this to set its origin
+- `/ptp dock` or `/ptp replace`: show the window next to Blizzard's Beast Training, or in its place (the default)
+- `/ptp debug`: print what the addon sees (trainer frames, pet, last log line)
+- `/ptp reset`: clear this character's known ranks, pets and log
+
+## Good to know
+
+- Forever's Beast Training lists only the ranks your **current pet's family** can learn. Open it once with each
+  family you use, and Pet Training+ fills in everything you know. After that, new ranks are picked up from the
+  learn message as you play.
+- Training has to go through Blizzard's own Train button, because addons are not allowed to train pets directly.
+  That is why Train takes two presses. If a rank can't be found on screen, click **Show Blizzard window**
+  and scroll to it.
+- If you close Pet Training+ while Beast Training is open, the Blizzard window comes back.
+
+## Credits
+
+Rank spell IDs come from HunterTools-Forever (MIT, © 2026 Gideon), taken from Forever client data. Pet levels,
+TP costs, icons and families come from Forever Hunter Pets (MIT, © 2026 Elmar Höfinghoff), collected in game.
+The Beast Training rules (what taints the trainer, and the two-press secure click) were found in game by the
+authors of Forever Hunter Pets and Hunter Pet Trainer (MIT, © 2026 Xzeryn). Spell names and icons belong to
+Blizzard Entertainment.
+
+## Development
+
+`tests/` holds a small mock of the WoW API that runs the main flows outside the game
+(Beast Training read and ghosting, the two-press Train, learn messages, tames, the Forever Bestiary link):
+
+    lua5.1 tests/run.lua
+
+WoW only loads the files listed in the `.toc`, so `tests/` can stay in the addon folder.
