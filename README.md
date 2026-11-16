@@ -7,6 +7,8 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 - **One line per pet skill, all ranks together.** Each rank is a small pill:
   gold = you know it, green = your current pet has it, bright edge = trainable right now,
   red = you have not learned it, grey = not seen yet.
+- **Only what your pet can learn.** A large toggle above the skill list hides every skill your current pet's family
+  can't learn, or shows them all again. With no pet summoned, every skill is shown.
 - **Your pet at a glance.** Name, level, family, free training points, and for every skill
   whether this pet has it, can learn it, or its family can't.
 - **Learn Log.** At the moment the game says "You have learned a new spell", Pet Training+ writes down
@@ -26,6 +28,7 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 - `/ptp log`: open the Learn Log
 - `/ptp origin`: for a pet tamed before you installed this, target a beast of the same kind and use this to set its origin
 - `/ptp dock` or `/ptp replace`: show the window next to Blizzard's Beast Training, or in its place (the default)
+- `/ptp scale 1.3`: window size (text included); 1.3 is the default, capped to fit your screen
 - `/ptp debug`: print what the addon sees (trainer frames, pet, last log line)
 - `/ptp reset`: clear this character's known ranks, pets and log
 

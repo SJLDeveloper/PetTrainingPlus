@@ -10,6 +10,8 @@ local LIST_W = 372
 local ROW_H = 30
 local RANK_ROW_H = 20
 local LOG_ROW_H = 36
+local TOGGLE_H = 38
+local SCALE = 1.3 -- the whole window, text included (about +4 points on the usual fonts); /ptp scale changes it
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
 local READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
@@ -202,13 +204,24 @@ local function abilityMatches(a)
     local n = ns.AbilityName(a):lower()
     if not n:find(state.search, 1, true) and not a.key:lower():find(state.search, 1, true) then return false end
   end
-  local flt = ns.db.opts.filter
-  if flt == "known" and ns.KnownCount(a) == 0 then return false end
-  if flt == "pet" then
-    if not ns.pet then return true end
-    if ns.FamilyCanLearn(ns.pet.fam, a) == false then return false end
-  end
+  if ns.db.opts.filter == "known" and ns.KnownCount(a) == 0 then return false end
+  if UI.PetOnlyActive() and ns.FamilyCanLearn(ns.pet.fam, a) == false then return false end
   return true
+end
+
+-- The "only what my pet can learn" toggle hides skills only while a pet is out.
+function UI.PetOnlyActive()
+  return ns.db.opts.petOnly and ns.pet ~= nil and ns.pet.fam ~= nil
+end
+
+-- How many skills the current pet's family can't learn (what the toggle hides).
+local function hiddenByPet()
+  if not (ns.pet and ns.pet.fam) then return 0 end
+  local n = 0
+  for _, a in ipairs(ns.Abilities) do
+    if ns.FamilyCanLearn(ns.pet.fam, a) == false then n = n + 1 end
+  end
+  return n
 end
 
 local function sortKey(a)
@@ -369,6 +382,41 @@ function UI.RefreshList()
     bar.thumb:SetPoint("TOP", bar, "TOP", 0, -(h - th) * (state.offset / math.max(maxOff, 1)))
   else
     bar:Hide()
+  end
+end
+
+-- The skills the list shows now (for tests and debugging).
+function UI.ListedAbilities()
+  buildList()
+  local out = {}
+  for _, it in ipairs(listItems) do if it.a then out[it.a.key] = true end end
+  return out
+end
+
+function UI.RefreshToggle()
+  local tg = f and f.skills and f.skills.toggle
+  if not tg then return end
+  local p = ns.pet
+  if not (p and p.fam) then
+    backdrop(tg, { .10, .10, .10, 1 }, { .30, .30, .30, 1 }, 2)
+    tg.icon:SetTexture("Interface\\Icons\\Ability_Hunter_BeastCall")
+    tg.icon:SetDesaturated(true)
+    tg.title:SetText("|cffaaaaaaNo pet summoned: showing every skill|r")
+    tg.sub:SetText("|cff888888Summon a pet to hide what it can't learn|r")
+    return
+  end
+  tg.icon:SetDesaturated(false)
+  if SetPortraitTexture then pcall(SetPortraitTexture, tg.icon, "pet") end
+  local who = (p.name or "your pet") .. " (" .. ns.FamName(p.fam) .. ")"
+  local n = hiddenByPet()
+  if ns.db.opts.petOnly then
+    backdrop(tg, { .10, .28, .10, 1 }, { .35, .95, .40, 1 }, 2)
+    tg.title:SetText("|cff9cff7aShowing only what " .. who .. " can learn|r")
+    tg.sub:SetText(n .. " skill" .. (n == 1 and "" or "s") .. " hidden · click to show all skills")
+  else
+    backdrop(tg, { .30, .21, .05, 1 }, { 1, .75, .25, 1 }, 2)
+    tg.title:SetText("|cffffd100Showing all skills|r")
+    tg.sub:SetText("Click to hide the " .. n .. " that " .. who .. " can't learn")
   end
 end
 
@@ -747,11 +795,11 @@ local function buildSkills(parent)
   search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   search:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
 
-  local filters = { { "all", "All" }, { "known", "Known" }, { "pet", "For my pet" } }
+  local filters = { { "all", "All ranks" }, { "known", "Known only" } }
   s.filterButtons = {}
   local prev
   for i, fl in ipairs(filters) do
-    local b = textButton(s, fl[2], fl[1] == "pet" and 74 or 50, 20)
+    local b = textButton(s, fl[2], 80, 20)
     if prev then b:SetPoint("LEFT", prev, "RIGHT", 3, 0) else b:SetPoint("LEFT", search, "RIGHT", 8, 0) end
     b:SetScript("OnClick", function()
       ns.db.opts.filter = fl[1]
@@ -763,8 +811,31 @@ local function buildSkills(parent)
     prev = b
   end
 
+  -- the big pet toggle: fixed above the list, it never scrolls
+  local tg = CreateFrame("Button", nil, s, "BackdropTemplate")
+  tg:SetPoint("TOPLEFT", 0, -26)
+  tg:SetSize(LIST_W, TOGGLE_H)
+  tg.icon = tg:CreateTexture(nil, "ARTWORK")
+  tg.icon:SetSize(22, 22)
+  tg.icon:SetPoint("LEFT", 8, 0)
+  tg.title = fs(tg, "GameFontNormal")
+  tg.title:SetPoint("TOPLEFT", tg.icon, "TOPRIGHT", 8, 1)
+  tg.title:SetPoint("RIGHT", -8, 0)
+  tg.sub = fs(tg, "GameFontHighlightSmall")
+  tg.sub:SetPoint("BOTTOMLEFT", tg.icon, "BOTTOMRIGHT", 8, -2)
+  tg.sub:SetPoint("RIGHT", -8, 0)
+  local thl = tex(tg, "HIGHLIGHT", 1, 1, 1, .08)
+  thl:SetAllPoints()
+  tg:SetScript("OnClick", function()
+    if not (ns.pet and ns.pet.fam) then return end
+    ns.db.opts.petOnly = not ns.db.opts.petOnly
+    state.offset = 0
+    UI.Refresh()
+  end)
+  s.toggle = tg
+
   local list = CreateFrame("Frame", nil, s, "BackdropTemplate")
-  list:SetPoint("TOPLEFT", 0, -26)
+  list:SetPoint("TOPLEFT", 0, -(26 + TOGGLE_H + 6))
   list:SetSize(LIST_W, 1)
   list:SetPoint("BOTTOM", s, "BOTTOM", 0, 0)
   backdrop(list, { 0, 0, 0, .25 }, { .3, .25, .15, .6 })
@@ -774,7 +845,7 @@ local function buildSkills(parent)
   inner:SetPoint("TOPLEFT", 4, -3)
   inner:SetPoint("BOTTOMRIGHT", -10, 3)
   s.list = list
-  local n = math.floor((H - 118 - 44 - 26 - 6) / ROW_H)
+  local n = math.floor((H - 118 - 44 - 26 - TOGGLE_H - 6 - 6) / ROW_H)
   for i = 1, n do listRows[i] = makeListRow(inner, i) end
 
   local bar = CreateFrame("Frame", nil, list)
@@ -789,7 +860,7 @@ local function buildSkills(parent)
 
   -- right: detail
   local d = CreateFrame("Frame", nil, s, "BackdropTemplate")
-  d:SetPoint("TOPLEFT", list, "TOPRIGHT", 10, 26)
+  d:SetPoint("TOPLEFT", s, "TOPLEFT", LIST_W + 10, 0)
   d:SetPoint("BOTTOMRIGHT", 0, 0)
   backdrop(d, { 0, 0, 0, .25 }, { .3, .25, .15, .6 })
   s.detail = d
@@ -895,9 +966,26 @@ local function restorePosition()
   end
 end
 
+-- Scale of the window (1.3 by default), never taller than the screen.
+local function windowScale()
+  local want = (ns.db and ns.db.opts.scale) or SCALE
+  local h = UIParent and UIParent:GetHeight()
+  if type(h) == "number" and h > 0 then want = math.min(want, h * 0.95 / H) end
+  return math.max(want, 0.6)
+end
+
+function UI.ApplyScale()
+  if not f or ns.InCombat() then return end
+  f:SetScale(windowScale())
+  if f:IsShown() then UI.PlaceSecure() end
+end
+
 local function placeSecure()
   if ns.InCombat() then UI.securePending = true; return end
   local act, close = T.CreateSecureButtons(f)
+  -- the secure buttons sit on UIParent: same scale as the window
+  act:SetScale(f:GetScale())
+  close:SetScale(f:GetScale())
   -- always a layer above the window, which can be raised inside its own layer
   local strata = f:GetFrameStrata() == "DIALOG" and "FULLSCREEN" or "DIALOG"
   act:SetFrameStrata(strata)
@@ -924,6 +1012,7 @@ function UI.Init()
   f = CreateFrame("Frame", "PetTrainingPlusFrame", UIParent, "BackdropTemplate")
   UI.frame = f
   f:SetSize(W, H)
+  f:SetScale(windowScale())
   f:SetFrameStrata("HIGH")
   f:SetToplevel(true)
   f:SetClampedToScreen(true)
@@ -1062,6 +1151,7 @@ function UI.Refresh()
   f.tabSkills:SetActive(skills)
   f.tabLog:SetActive(not skills)
   for _, b in ipairs(f.skills.filterButtons) do b:SetActive(ns.db.opts.filter == b.key) end
+  UI.RefreshToggle()
   f.log.tames:SetActive(ns.db.opts.showTames)
   f.log.tames.label:SetText(ns.db.opts.showTames and "Hide tames" or "Show tames")
   UI.RefreshPet()
@@ -1108,7 +1198,7 @@ function UI.ShowForTrainer()
   if not f then UI.Init() end
   if not (ns.db.opts.autoOpen or f:IsShown()) then return end
   state.tab = "skills"
-  if ns.db.opts.filter == "known" then ns.db.opts.filter = "pet" end
+  if ns.db.opts.filter == "known" then ns.db.opts.filter = "all" end
   f:Show()
   -- start on what this pet can train now
   if not state.ability or ns.RankPetState(state.rank or state.ability.ranks[1]) == "family" then

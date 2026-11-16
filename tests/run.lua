@@ -227,4 +227,36 @@ M.fire("CHAT_MSG_SYSTEM", "You have learned a new spell: |cff71d5ff|Hspell:23163
 M.advance(0.3)
 check(ns.char.log[#ns.char.log].key ~= "Harass", "a Harass learn message is ignored")
 check(#M.errors == 0, "no errors")
+-- 1.2 pet toggle: hide what the current pet can't learn
+ns.db.opts.filter = "all"
+M.units.npc = nil
+M.units.pet = { name = "Fang", level = 17, guid = "Pet-0-1-2-3-165189-0400AB", fam = 5, famName = "Boar" }
+M.petSpells = { 17256, 26177, 14916 }
+M.fire("UNIT_PET", "player"); M.advance(2)
+ns.db.opts.petOnly = true
+local shown = ns.UI.ListedAbilities()
+check(shown.Bite and shown.Charge and shown.Dash and shown.Growl and shown["Cobra Reflexes"], "toggle on (boar): Bite, Charge, Dash, Growl, Cobra Reflexes shown")
+check(not shown.Claw and not shown.Prowl and not shown.Dive and not shown.Web, "toggle on (boar): Claw, Prowl, Dive, Web hidden")
+ns.UI.Refresh()
+check(ns.UI.frame.skills.toggle.title:GetText():find("Showing only what Fang"), "toggle label: " .. ns.UI.frame.skills.toggle.title:GetText())
+ns.UI.frame.skills.toggle._scripts.OnClick(ns.UI.frame.skills.toggle)
+check(ns.db.opts.petOnly == false, "click turns the toggle off")
+shown = ns.UI.ListedAbilities()
+check(shown.Claw and shown.Prowl and shown.Dive, "toggle off: everything shown")
+check(ns.UI.frame.skills.toggle.title:GetText():find("Showing all skills"), "toggle label: all")
+ns.UI.frame.skills.toggle._scripts.OnClick(ns.UI.frame.skills.toggle)
+check(ns.db.opts.petOnly == true, "click turns it back on")
+M.units.pet = nil; M.petSpells = {}
+M.fire("UNIT_PET", "player"); M.advance(2)
+shown = ns.UI.ListedAbilities()
+check(ns.pet == nil and shown.Claw and shown.Prowl and shown.Bite, "no pet: everything shown even with the toggle on")
+check(ns.UI.frame.skills.toggle.title:GetText():find("No pet summoned"), "toggle label without pet")
+ns.UI.frame.skills.toggle._scripts.OnClick(ns.UI.frame.skills.toggle)
+check(ns.db.opts.petOnly == true, "toggle does nothing without a pet")
+check(math.abs(ns.UI.frame._scale - 1.3) < 0.01, "window scale 1.3 (got " .. tostring(ns.UI.frame._scale) .. ")")
+check(math.abs(PetTrainingPlusActionButton._scale - 1.3) < 0.01, "secure button scaled with the window")
+UIParent.GetHeight = function() return 600 end
+ns.UI.ApplyScale()
+check(ns.UI.frame._scale < 1.03, "scale capped to fit a short screen: " .. ns.UI.frame._scale)
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

@@ -90,7 +90,9 @@ function Frame:GetStringWidth() return #(self._text or "") * 6 end
 function Frame:IsEnabled() return self._enabled ~= false end
 function Frame:Enable() self._enabled = true end
 function Frame:Disable() self._enabled = false end
-function Frame:GetHeight() return 300 end
+function Frame:GetHeight() return rawget(self, "_h") or 900 end
+function Frame:SetScale(v) self._scale = v end
+function Frame:GetScale() return rawget(self, "_scale") or 1 end
 function Frame:Click()
   if self._scripts.OnClick then self._scripts.OnClick(self, "LeftButton") end
 end

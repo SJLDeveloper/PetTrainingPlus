@@ -175,7 +175,7 @@ function ns.FamilyCanLearn(fam, a)
 end
 
 -- ------------------------------------------------------------------ saved data
-local DEFAULTS = { replace = true, autoOpen = true, showTames = true, filter = "all" }
+local DEFAULTS = { replace = true, autoOpen = true, showTames = true, filter = "all", petOnly = true, scale = 1.3 }
 
 local function initDB()
   PetTrainingPlusDB = PetTrainingPlusDB or {}
@@ -187,6 +187,8 @@ local function initDB()
   db.creatures = db.creatures or {} -- [npcID] = { name, teaches = { [key] = rank }, t }
   db.opts = db.opts or {}
   for k, v in pairs(DEFAULTS) do if db.opts[k] == nil then db.opts[k] = v end end
+  -- 1.2: the old "For my pet" filter became the pet toggle
+  if db.opts.filter == "pet" then db.opts.filter, db.opts.petOnly = "all", true end
   ns.db = db
 
   PetTrainingPlusCharDB = PetTrainingPlusCharDB or {}
@@ -716,6 +718,15 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
     ns.Print(ns.db.opts.replace and "Beast Training: Pet Training+ replaces the Blizzard window."
       or "Beast Training: Pet Training+ docks next to the Blizzard window.")
     if ns.T and ns.T.ApplyMode then ns.T.ApplyMode() end
+  elseif msg:match("^scale") then
+    local v = tonumber(msg:match("^scale%s+([%d%.]+)"))
+    if v and v >= 0.6 and v <= 2 then
+      ns.db.opts.scale = v
+      if ns.UI and ns.UI.ApplyScale then ns.UI.ApplyScale() end
+      ns.Print(("Window scale %.2f."):format(v))
+    else
+      ns.Print(("Window scale is %.2f. Use /ptp scale 0.6 to 2 (1.3 is the default)."):format(ns.db.opts.scale or 1.3))
+    end
   elseif msg == "reset" then
     PetTrainingPlusCharDB = nil
     initDB()
@@ -724,7 +735,8 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
     ns.Print("This character's known ranks, pets and log were cleared.")
   elseif msg == "help" or msg == "?" then
     ns.Print("/ptp — open/close · /ptp log — learn log · /ptp origin — set your pet's origin to your target")
-    ns.Print("/ptp replace | dock — how the window behaves in Beast Training · /ptp reset — clear this character")
+    ns.Print("/ptp replace | dock — how the window behaves in Beast Training · /ptp scale 1.3 — window size")
+    ns.Print("/ptp reset — clear this character")
   else
     if ns.UI then ns.UI.Toggle() end
   end
