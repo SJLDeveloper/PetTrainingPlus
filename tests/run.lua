@@ -213,4 +213,18 @@ check(ns.UI.state.ability == before, "right-click does not change the selection"
 ns.Bestiary.ShowAbility(ns.byKey["Fire Resistance"]); M.advance(1)
 check(M.prints[#M.prints]:find("isn't listed"), "ability missing in Bestiary: message")
 check(#M.errors == 0, "no errors")
+-- v1.1.1 family corrections
+local can = ns.FamilyCanLearn
+check(can(2, ns.byKey.Dash) and can(1, ns.byKey.Dash) and can(25, ns.byKey.Dash) and can(12, ns.byKey.Dash) and can(5, ns.byKey.Dash), "Dash: Cat, Wolf, Hyena, Tallstrider, Boar")
+check(can(4, ns.byKey.Dash) == false, "Dash: not Bear")
+check(can(24, ns.byKey.Dive) and can(7, ns.byKey.Dive) and can(26, ns.byKey.Dive) and can(27, ns.byKey.Dive) and can(2, ns.byKey.Dive) == false, "Dive: Bat, Carrion Bird, Owl, Wind Serpent only")
+check(can(2, ns.byKey.Prowl) and can(1, ns.byKey.Prowl) == false, "Prowl: Cat only")
+check(can(9, ns.byKey.Thunderstomp) and can(5, ns.byKey.Thunderstomp) == false, "Thunderstomp: Gorilla only")
+check(can(21, ns.byKey["Shell Shield"]) and can(8, ns.byKey["Shell Shield"]) == false, "Shell Shield: Turtle only")
+check(ns.byKey["Cobra Reflexes"].kind == "general" and can(319, ns.byKey["Cobra Reflexes"]) and ns.RankLevel(ns.byKey["Cobra Reflexes"].rankBy[1]) == 30, "Cobra Reflexes: trainer, all families, pet level 30")
+check(ns.byKey.Harass == nil and ns.byHunter[23163] == nil, "Harass removed")
+M.fire("CHAT_MSG_SYSTEM", "You have learned a new spell: |cff71d5ff|Hspell:23163:0|h[Harass]|h|r.")
+M.advance(0.3)
+check(ns.char.log[#ns.char.log].key ~= "Harass", "a Harass learn message is ignored")
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")
