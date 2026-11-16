@@ -300,4 +300,39 @@ M.fire("TRAINER_UPDATE"); M.fire("SPELLS_CHANGED"); M.advance(3)
 check(ns.UI.state.rank == bite.rankBy[6], "no trainable rank left: highlight on the next rank (Bite 6)")
 check(ns.T.target == nil, "Train button idle for a rank that can't be trained: " .. tostring(btn:GetText()))
 check(#M.errors == 0, "no errors")
+-- 1.3.0: drag anywhere, also over Beast Training (its own remembered spot); Bestiary comes to the front
+local win = ns.UI.frame
+check(ns.T.beast and ns.UI.attached, "Beast Training open, window attached")
+check(win._scripts.OnDragStart ~= nil, "the whole window has a drag handler")
+win._scripts.OnDragStart(win)
+win:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 120, -80) -- where the player drops it
+win._scripts.OnDragStop(win)
+check(ns.db.trainerPos and ns.db.trainerPos.x == 120 and ns.db.trainerPos.y == -80, "Beast Training position remembered")
+local normalPos = ns.db.pos
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+check(ns.db.pos == normalPos, "normal position untouched")
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(1)
+local pt = { win:GetPoint() }
+check(pt[2] == UIParent and pt[4] == 120 and pt[5] == -80, "next Beast Training opens where it was dragged")
+M.combat = true
+local movedInCombat = false
+win.StartMoving = function() movedInCombat = true end
+win._scripts.OnDragStart(win)
+check(not movedInCombat, "no dragging in combat")
+M.combat = false
+SlashCmdList.PETTRAININGPLUS("resetpos"); M.advance(0.2)
+pt = { win:GetPoint() }
+check(ns.db.trainerPos == nil and pt[2] == ClassTrainerFrame, "/ptp resetpos: back on top of Beast Training")
+-- Bestiary on top
+ns.Bestiary.SendBack()
+fb._strata, fb._level = "HIGH", 5
+ns.Bestiary.ShowAbility(ns.byKey.Bite)
+local act = PetTrainingPlusActionButton
+check(fb:GetFrameStrata() == act:GetFrameStrata() and fb:GetFrameLevel() > act:GetFrameLevel(), "Bestiary raised above our window and buttons (" .. fb:GetFrameStrata() .. ")")
+win._scripts.OnMouseDown(win)
+check(fb:GetFrameStrata() == "HIGH" and fb:GetFrameLevel() == 5, "click on our window: Bestiary back to its own layer")
+ns.Bestiary.ShowAbility(ns.byKey.Bite)
+fb:Hide()
+check(fb:GetFrameStrata() == "HIGH", "closing the Bestiary restores its layer")
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

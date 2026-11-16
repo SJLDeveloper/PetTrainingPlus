@@ -727,6 +727,9 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
     else
       ns.Print(("Window scale is %.2f. Use /ptp scale 0.6 to 2 (1.3 is the default)."):format(ns.db.opts.scale or 1.3))
     end
+  elseif msg == "resetpos" then
+    if ns.UI and ns.UI.ResetPosition then ns.UI.ResetPosition() end
+    ns.Print("Window position reset.")
   elseif msg == "reset" then
     PetTrainingPlusCharDB = nil
     initDB()
@@ -736,6 +739,7 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
   elseif msg == "help" or msg == "?" then
     ns.Print("/ptp — open/close · /ptp log — learn log · /ptp origin — set your pet's origin to your target")
     ns.Print("/ptp replace | dock — how the window behaves in Beast Training · /ptp scale 1.3 — window size")
+    ns.Print("Drag the window anywhere (it remembers a separate spot for Beast Training) · /ptp resetpos — put it back")
     ns.Print("/ptp reset — clear this character")
   else
     if ns.UI then ns.UI.Toggle() end

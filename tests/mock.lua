@@ -76,7 +76,7 @@ function Frame:RegisterEvent(e) self._events[e] = true; M.eventFrames = M.eventF
 function Frame:IsObjectType(t) return self._kind == t end
 function Frame:GetChildren() return unpack(self._children) end
 function Frame:GetRegions() return unpack(self._regions) end
-function Frame:GetPoint() return self._point and unpack(self._point) end
+function Frame:GetPoint() local p = rawget(self, "_point"); if p then return unpack(p) end end
 function Frame:SetPoint(...) self._point = { ... } end
 function Frame:CreateTexture() local t = setmetatable({ _kind = "Texture", _shown = true, _scripts = {}, _parent = self }, Frame); return t end
 function Frame:CreateFontString()

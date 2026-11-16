@@ -978,10 +978,30 @@ local function buildLog(parent)
   for i = 1, n do logRows[i] = makeLogRow(inner, i) end
 end
 
+-- Two remembered places: the normal one, and the one you dragged it to while Beast Training was open.
 local function savePosition()
-  if UI.attached then return end
   local point, _, rel, x, y = f:GetPoint(1)
-  ns.db.pos = { point = point, rel = rel, x = x, y = y }
+  local pos = { point = point, rel = rel, x = x, y = y }
+  if UI.attached then ns.db.trainerPos = pos else ns.db.pos = pos end
+end
+
+local function startMove()
+  if ns.InCombat() then return end -- the secure buttons hang on the window: it can't move in combat
+  f:StartMoving()
+end
+local function stopMove()
+  f:StopMovingOrSizing()
+  savePosition()
+end
+
+function UI.ResetPosition()
+  if not ns.db then return end
+  ns.db.pos, ns.db.trainerPos = nil, nil
+  if not f then return end
+  if T.beast then T.ApplyMode() else
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
+  end
 end
 
 local function restorePosition()
@@ -1063,8 +1083,16 @@ function UI.Init()
   tb:SetAllPoints()
   title:EnableMouse(true)
   title:RegisterForDrag("LeftButton")
-  title:SetScript("OnDragStart", function() if not UI.attached and not ns.InCombat() then f:StartMoving() end end)
-  title:SetScript("OnDragStop", function() f:StopMovingOrSizing(); savePosition() end)
+  title:SetScript("OnDragStart", startMove)
+  title:SetScript("OnDragStop", stopMove)
+  -- the whole window drags too (wherever no button is)
+  f:RegisterForDrag("LeftButton")
+  f:SetScript("OnDragStart", startMove)
+  f:SetScript("OnDragStop", stopMove)
+  -- a click on our window brings it back in front of Forever Bestiary
+  f:SetScript("OnMouseDown", function()
+    if ns.Bestiary and ns.Bestiary.SendBack then ns.Bestiary.SendBack() end
+  end)
   local ticon = title:CreateTexture(nil, "ARTWORK")
   ticon:SetSize(20, 20)
   ticon:SetPoint("LEFT", 6, 0)
@@ -1214,7 +1242,10 @@ function UI.AttachToTrainer(trainer, replace)
   if not UI.attached then UI.wasShown = f:IsShown() end
   UI.attached = true
   f:ClearAllPoints()
-  if replace then
+  local p = ns.db.trainerPos
+  if p and p.point then
+    f:SetPoint(p.point, UIParent, p.rel or p.point, p.x or 0, p.y or 0)
+  elseif replace then
     f:SetPoint("TOPLEFT", trainer, "TOPLEFT", 0, 0)
   else
     f:SetPoint("TOPLEFT", trainer, "TOPRIGHT", 6, 0)

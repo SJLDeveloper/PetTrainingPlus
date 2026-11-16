@@ -59,6 +59,37 @@ local function findCard(names)
   return found
 end
 
+-- Forever Bestiary's window is in the HIGH layer like ours, but our window (while Beast Training is open) and our
+-- secure Train/close buttons are in higher layers. After a right-click its window goes above all of ours; a click on
+-- our window, or closing the Bestiary, puts it back where it was.
+local raised
+local hooked = false
+function B.BringToFront()
+  local fb = _G.FBPetHunterFrame
+  local ours = ns.UI and ns.UI.frame
+  if not (fb and ours) then return end
+  local act = ns.T and ns.T.ActionButton and ns.T.ActionButton()
+  local top = (act and act:IsShown()) and act or ours
+  if not raised then
+    raised = { strata = fb:GetFrameStrata(), level = fb:GetFrameLevel() }
+    if not hooked then
+      hooked = true
+      fb:HookScript("OnHide", function() B.SendBack() end)
+    end
+  end
+  fb:SetFrameStrata(top:GetFrameStrata())
+  fb:SetFrameLevel(math.min(top:GetFrameLevel() + 20, 9000))
+  if fb.Raise then fb:Raise() end
+end
+
+function B.SendBack()
+  local fb = _G.FBPetHunterFrame
+  if not (raised and fb) then return end
+  fb:SetFrameStrata(raised.strata or "HIGH")
+  if raised.level then fb:SetFrameLevel(raised.level) end
+  raised = nil
+end
+
 function B.ShowAbility(a)
   if not a then return end
   if not B.Available() then
@@ -76,9 +107,11 @@ function B.ShowAbility(a)
     local card = findCard(names)
     if card then
       pcall(card.Click, card, "LeftButton")
+      B.BringToFront()
     elseif tries < 4 then
       ns.After(0.1, attempt)
     else
+      B.BringToFront()
       ns.Print(("Opened Forever Bestiary's Abilities tab: %s isn't listed there."):format(loc or a.key))
     end
   end
