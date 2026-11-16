@@ -349,9 +349,12 @@ function T.CreateSecureButtons(parent)
           T.warning = "The row did not get selected. Press again."
         end
       else
+        local trained = T.target.r
         T.mode = "select"
         ns.RefreshPetSoon(0.5)
         ns.After(0.8, function() if T.beast then T.Scan("beast") end end)
+        -- once the pet has it, move on to the next rank of the same skill
+        ns.After(1.2, function() T.AfterTrain(trained, 0) end)
       end
       T.UpdateTrainButton()
     end)
@@ -386,6 +389,19 @@ function T.CreateSecureButtons(parent)
   closeBtn:Hide()
   actionBtn:Hide()
   return actionBtn, closeBtn
+end
+
+-- After a train press: when the pet shows the rank (the spellbook updates a moment later), the window moves its
+-- highlight to the next rank and points the Train button at it.
+function T.AfterTrain(r, tries)
+  if not T.beast or ns.InCombat() then return end
+  local cur = ns.pet and ns.pet.ranks[r.a.key]
+  if cur and cur >= r.r then
+    if ns.UI and ns.UI.AdvanceAfterTrain then ns.UI.AdvanceAfterTrain(r) end
+  elseif tries < 4 then
+    ns.RefreshPetSoon(0.1)
+    ns.After(0.6, function() T.AfterTrain(r, tries + 1) end)
+  end
 end
 
 -- Chosen rank for the Train button (from the window).

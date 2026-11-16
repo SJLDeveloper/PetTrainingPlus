@@ -441,6 +441,22 @@ local function bestTrainable(a)
   return best
 end
 
+-- After training rank r: the next rank of that skill your pet can train now, else simply the next rank (its row then
+-- shows what it still needs), else stay on r.
+function UI.AdvanceAfterTrain(r)
+  local a = r.a
+  local nextR
+  for k = r.r + 1, a.maxRank do
+    local rk = a.rankBy[k]
+    if rk and ns.RankPetState(rk) == "trainable" then nextR = rk; break end
+  end
+  nextR = nextR or a.rankBy[r.r + 1] or r
+  state.ability = a
+  state.rank = nextR
+  if T.beast then T.SetTarget(nextR) end
+  UI.Refresh()
+end
+
 function UI.Select(a, r)
   state.ability = a
   state.rank = r or bestTrainable(a)
@@ -750,6 +766,18 @@ function UI.OnTrainState()
   if T.beast then
     if s == "none" then
       txt = "Pick a rank marked |cff9cff7aTrainable|r to train it."
+      local r = state.rank
+      if r then
+        local nm = ns.AbilityName(r.a) .. " " .. r.r
+        local ps, d = ns.RankPetState(r)
+        local why = ({
+          has = "your pet already has it", below = "your pet has a higher rank",
+          family = "this family can't learn it", unlearned = "you haven't learned this rank yet",
+          famunknown = "not known yet whether this family can learn it",
+          level = "needs pet level " .. tostring(d), tp = "needs " .. tostring(d) .. " training points",
+        })[ps]
+        if why then txt = nm .. ": " .. why .. "." end
+      end
     elseif s == "select" then
       txt = "Press once to select, then again to train."
     elseif s == "train" then

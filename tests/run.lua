@@ -259,4 +259,45 @@ UIParent.GetHeight = function() return 600 end
 ns.UI.ApplyScale()
 check(ns.UI.frame._scale < 1.03, "scale capped to fit a short screen: " .. ns.UI.frame._scale)
 check(#M.errors == 0, "no errors")
+-- 1.2.1: after training a rank, the highlight and the Train button move to the next rank
+M.units.npc = nil
+ClassTrainerFrameTrainingPointsLabel._shown = true
+M.units.pet = { name = "Fang", level = 40, guid = "Pet-0-1-2-3-165189-0400AB", fam = 5, famName = "Boar" }
+M.petSpells = { 17256, 26177, 14916 }
+M.tp = { 200, 41 }
+M.fire("UNIT_PET", "player"); M.advance(2)
+M.services = {
+  { name = "Bite", rankText = "Rank 3", status = "used", lvl = 16, tp = 7, id = 17256 },
+  { name = "Bite", rankText = "Rank 4", status = "available", lvl = 24, tp = 10, id = 17257 },
+  { name = "Bite", rankText = "Rank 5", status = "available", lvl = 32, tp = 13, id = 17258 },
+  { name = "Charge", rankText = "Rank 2", status = "used", lvl = 12, tp = 5, id = 26177 },
+}
+M.filters = { used = false, available = true, unavailable = true }
+tf:Show(); M.rebuildRows()
+M.fire("TRAINER_SHOW"); M.advance(2.5)
+local bite = ns.byKey.Bite
+ns.UI.Select(bite, bite.rankBy[4]); M.advance(0.5)
+check(ns.T.target and ns.T.target.r == bite.rankBy[4], "target Bite 4")
+press()
+press()
+check(M.trained == "Bite Rank 4", "trained Bite 4")
+-- the game: the pet learns Bite 4, the list updates
+M.petSpells = { 17257, 26177, 14916 }
+M.services[2].status = "used"
+M.rebuildRows()
+M.fire("TRAINER_UPDATE")
+M.fire("SPELLS_CHANGED")
+M.advance(3)
+check(ns.pet.ranks.Bite == 4, "pet has Bite 4")
+check(ns.UI.state.rank == bite.rankBy[5], "highlight moved to Bite 5")
+check(ns.T.target and ns.T.target.r == bite.rankBy[5], "Train button targets Bite 5")
+check(btn:GetText() == "Select Bite 5", "button ready: " .. tostring(btn:GetText()))
+press(); press()
+check(M.trained == "Bite Rank 5", "trained Bite 5 straight away")
+M.petSpells = { 17258, 26177, 14916 }
+M.services[3].status = "used"; M.rebuildRows()
+M.fire("TRAINER_UPDATE"); M.fire("SPELLS_CHANGED"); M.advance(3)
+check(ns.UI.state.rank == bite.rankBy[6], "no trainable rank left: highlight on the next rank (Bite 6)")
+check(ns.T.target == nil, "Train button idle for a rank that can't be trained: " .. tostring(btn:GetText()))
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")
