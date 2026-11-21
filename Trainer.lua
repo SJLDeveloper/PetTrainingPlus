@@ -202,16 +202,19 @@ function T.Wrap(on)
     end
     if not T.wrapped then
       T.saved.strata = {}
-      for _, fr in ipairs({ sb, bar }) do T.saved.strata[fr] = fr:GetFrameStrata() end
+      local tgt = sb and type(sb.ScrollTarget) == "table" and sb.ScrollTarget or nil
+      for _, fr in ipairs({ sb, bar, tgt }) do if fr then T.saved.strata[fr] = fr:GetFrameStrata() end end
       T.wrapAt = GetTime()
       T.wrapChecked = false
     end
     T.wrapped = true
-    f:SetAlpha(0)
+    -- order matters: the list ignores its parent's alpha first, then the window goes invisible
     for _, fr in ipairs({ sb, bar }) do
       if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(true) end
     end
-    T.KeepListOnTop()
+    f:SetAlpha(0)
+    T.RefreshListAlpha()
+    T.KeepListOnTop(true)
     for _, b in ipairs(blizzardButtons()) do coverFor(b):Show() end
     T.Align()
   else
@@ -219,8 +222,17 @@ function T.Wrap(on)
       f:SetAlpha(T.saved.alpha or 1)
       for _, fr in ipairs({ sb, bar }) do
         if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(false) end
-        local st = T.saved.strata and T.saved.strata[fr]
-        if fr and st and fr:GetFrameStrata() ~= st then fr:SetFrameStrata(st) end
+      end
+      -- every frame we raised goes back to the layer it had (rows to their scroll target's)
+      local tgt = sb and type(sb.ScrollTarget) == "table" and sb.ScrollTarget or nil
+      for fr, st in pairs(T.saved.strata or {}) do
+        if fr:GetFrameStrata() ~= st then fr:SetFrameStrata(st) end
+      end
+      local rowStrata = tgt and T.saved.strata[tgt] or (sb and T.saved.strata[sb])
+      if rowStrata and T.VisibleRows then
+        for _, row in ipairs(T.VisibleRows()) do
+          if row[1]:GetFrameStrata() ~= rowStrata then row[1]:SetFrameStrata(rowStrata) end
+        end
       end
       if #T.saved.points > 0 then
         f:ClearAllPoints()
@@ -233,11 +245,32 @@ function T.Wrap(on)
   end
 end
 
--- The list and its scroll bar must draw above our window (MEDIUM): HIGH, whatever their parent's layer does.
-function T.KeepListOnTop()
+-- Re-sets the list's own alpha so the game recomputes it for every row inside (rows created while the window was
+-- invisible could otherwise keep an alpha of 0).
+function T.RefreshListAlpha()
   local f = trainerFrame()
   if not f then return end
   for _, fr in ipairs({ f.ScrollBox, f.ScrollBar }) do
+    if type(fr) == "table" and fr.SetAlpha then
+      local a = clean(fr:GetAlpha()) or 1
+      if a < 0.05 then a = 1 end
+      fr:SetAlpha(a > 0.5 and a - 0.01 or a + 0.01)
+      fr:SetAlpha(a)
+    end
+  end
+end
+
+-- The list and its scroll bar must draw above our window (MEDIUM): HIGH, whatever their parent's layer does.
+-- (also the list's scroll target and its rows: rows made while the list was lower may keep the lower layer)
+function T.KeepListOnTop(withRows)
+  local f = trainerFrame()
+  if not f then return end
+  local sb = f.ScrollBox
+  local list = { sb, f.ScrollBar, type(sb) == "table" and sb.ScrollTarget or nil }
+  if withRows and T.VisibleRows then
+    for _, row in ipairs(T.VisibleRows()) do list[#list + 1] = row[1] end
+  end
+  for _, fr in ipairs(list) do
     if type(fr) == "table" and fr.GetFrameStrata and fr:GetFrameStrata() ~= "HIGH" then fr:SetFrameStrata("HIGH") end
   end
 end
@@ -266,6 +299,13 @@ function T.ListInSlot()
   if alpha and alpha < 0.5 then return false, ("list transparent (%.2f)"):format(alpha) end
   if math.abs(sl - bl) > 3 or math.abs(st - bt) > 3 then
     return false, ("list at %d,%d, slot at %d,%d"):format(bl, bt, sl, st)
+  end
+  -- the rows themselves must be visible too (an opaque list with transparent rows shows nothing)
+  local rows = T.VisibleRows and T.VisibleRows() or {}
+  local row = rows[1] and rows[1][1]
+  if row and row.GetEffectiveAlpha then
+    local ra = clean(row:GetEffectiveAlpha())
+    if ra and ra < 0.5 then return false, ("rows transparent (%.2f)"):format(ra) end
   end
   return true
 end
@@ -302,7 +342,7 @@ local acc = 0
 driver:SetScript("OnUpdate", function(_, dt)
   local f = trainerFrame()
   if T.wrapped and f then
-    if f:GetAlpha() > 0 then f:SetAlpha(0) end
+    if f:GetAlpha() > 0 then f:SetAlpha(0); T.RefreshListAlpha() end
     T.KeepListOnTop()
     T.Align() -- the window may have been moved (by us dragging, or Blizzard's panel layout)
     if not T.wrapChecked and T.wrapAt and GetTime() - T.wrapAt > 1.0 then
@@ -325,6 +365,7 @@ driver:SetScript("OnUpdate", function(_, dt)
   if acc >= 0.25 then
     acc = 0
     if T.beast and not (f and f:IsShown()) then T.EndBeast(); return end
+    if T.wrapped then T.KeepListOnTop(true) end
     T.FollowWindowSelection()
     T.UpdateTrainButton()
   end
@@ -443,6 +484,8 @@ local function visibleRows()
   scan(f.ScrollBox or f, 0)
   return out
 end
+
+T.VisibleRows = visibleRows
 
 -- The row showing this rank, if it is on screen; else nil and which way to scroll ("down" / "up").
 function T.FindRow(name, rankText)
@@ -840,6 +883,10 @@ function T.DebugReport()
   ns.Print("  its list: " .. fr(sb))
   ns.Print("  our slot: " .. fr(ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()))
   ns.Print("  our window: " .. fr(ns.UI and ns.UI.frame))
+  local r1 = visibleRows()[1]
+  ns.Print("  first row: " .. (r1 and fr(r1[1]) or "none"))
+  local tgt = sb and sb.ScrollTarget
+  if type(tgt) == "table" then ns.Print("  scroll target: " .. fr(tgt)) end
   local rows = visibleRows()
   local list = {}
   for _, row in ipairs(rows) do

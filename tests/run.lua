@@ -535,4 +535,42 @@ tf._left, tf._top, tf.ScrollBox._left, tf.ScrollBox._top = nil, nil, nil, nil
 SlashCmdList.PETTRAININGPLUS("debug"); SlashCmdList.PETTRAININGPLUS("debug")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
 check(#M.errors == 0, "no errors")
+-- 1.4.2: the list ignores its parent's alpha before the window goes invisible; transparent rows fall back to dock
+ns.db.opts.replace = true
+tf.ScrollBox._strata, tf.ScrollBar._strata = "MEDIUM", "MEDIUM"
+for _, r in ipairs(M.rows) do r._strata = "MEDIUM" end
+local order = {}
+local realSetAlpha, realIgnore = tf.SetAlpha, tf.ScrollBox.SetIgnoreParentAlpha
+tf.SetAlpha = function(self, a) table.insert(order, "window " .. a); realSetAlpha(self, a) end
+tf.ScrollBox.SetIgnoreParentAlpha = function(self, v) table.insert(order, "list ignore " .. tostring(v)); realIgnore(self, v) end
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(0.3)
+local iIgnore, iHide
+for k, v in ipairs(order) do
+  if v == "list ignore true" and not iIgnore then iIgnore = k end
+  if v == "window 0" and not iHide then iHide = k end
+end
+check(iIgnore and iHide and iIgnore < iHide, "list ignores parent alpha before the window goes invisible (" .. table.concat(order, ", ") .. ")")
+M.advance(0.5)
+local allHigh = true
+for _, r in ipairs(M.rows) do if r._shown and r:GetFrameStrata() ~= "HIGH" then allHigh = false end end
+check(allHigh, "visible rows raised to HIGH too")
+tf.SetAlpha, tf.ScrollBox.SetIgnoreParentAlpha = nil, nil
+-- list in the slot but its rows transparent: dock instead
+slot2._left, slot2._top, slot2._eff = 700, 600, 1
+tf._left, tf._top, tf._eff = 16, 652, 1
+tf.ScrollBox._left, tf.ScrollBox._top, tf.ScrollBox._eff = 700, 600, 1
+M.rows[1]._effAlpha = 0
+local realAlign2 = ns.T.Align
+ns.T.Align = function() end
+M.advance(1.5)
+check(not ns.T.wrapped and ns.T.wrapProblem and ns.T.wrapProblem:find("rows transparent"), "transparent rows: dock instead (" .. tostring(ns.T.wrapProblem) .. ")")
+ns.T.Align = realAlign2
+M.rows[1]._effAlpha = nil
+slot2._left, slot2._top = nil, nil
+tf._left, tf._top, tf.ScrollBox._left, tf.ScrollBox._top = nil, nil, nil, nil
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+local backDown = true
+for _, r in ipairs(M.rows) do if r:GetFrameStrata() == "HIGH" then backDown = false end end
+check(backDown and tf.ScrollBox:GetFrameStrata() ~= "HIGH", "unwrapped: list and rows back in their own layer")
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")
