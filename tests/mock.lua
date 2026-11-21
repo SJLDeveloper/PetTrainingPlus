@@ -115,6 +115,9 @@ function Frame:SetIgnoreParentAlpha(v) self._ignoreParentAlpha = v end
 function Frame:IsIgnoringParentAlpha() return rawget(self, "_ignoreParentAlpha") or false end
 function Frame:GetNumPoints() return rawget(self, "_point") and 1 or 0 end
 function Frame:GetLeft() return rawget(self, "_left") end
+function Frame:GetRight() local l = rawget(self, "_left"); return l and (l + (rawget(self, "_w") or 100)) end
+function Frame:GetBottom() local t = rawget(self, "_top"); return t and (t - (rawget(self, "_h") or 100)) end
+function Frame:GetEffectiveAlpha() return rawget(self, "_effAlpha") or 1 end
 function Frame:GetTop() return rawget(self, "_top") end
 function Frame:GetEffectiveScale() return rawget(self, "_eff") or 1 end
 function Frame:GetWidth() return rawget(self, "_w") or 100 end

@@ -200,11 +200,18 @@ function T.Wrap(on)
       for i = 1, (f.GetNumPoints and f:GetNumPoints() or 0) do pts[i] = { f:GetPoint(i) } end
       T.saved = { alpha = f:GetAlpha(), points = pts }
     end
+    if not T.wrapped then
+      T.saved.strata = {}
+      for _, fr in ipairs({ sb, bar }) do T.saved.strata[fr] = fr:GetFrameStrata() end
+      T.wrapAt = GetTime()
+      T.wrapChecked = false
+    end
     T.wrapped = true
     f:SetAlpha(0)
     for _, fr in ipairs({ sb, bar }) do
       if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(true) end
     end
+    T.KeepListOnTop()
     for _, b in ipairs(blizzardButtons()) do coverFor(b):Show() end
     T.Align()
   else
@@ -212,6 +219,8 @@ function T.Wrap(on)
       f:SetAlpha(T.saved.alpha or 1)
       for _, fr in ipairs({ sb, bar }) do
         if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(false) end
+        local st = T.saved.strata and T.saved.strata[fr]
+        if fr and st and fr:GetFrameStrata() ~= st then fr:SetFrameStrata(st) end
       end
       if #T.saved.points > 0 then
         f:ClearAllPoints()
@@ -224,16 +233,53 @@ function T.Wrap(on)
   end
 end
 
+-- The list and its scroll bar must draw above our window (MEDIUM): HIGH, whatever their parent's layer does.
+function T.KeepListOnTop()
+  local f = trainerFrame()
+  if not f then return end
+  for _, fr in ipairs({ f.ScrollBox, f.ScrollBar }) do
+    if type(fr) == "table" and fr.GetFrameStrata and fr:GetFrameStrata() ~= "HIGH" then fr:SetFrameStrata("HIGH") end
+  end
+end
+
+-- A frame's rectangle in screen pixels: left, top, right, bottom (nil if not laid out).
+local function screenRect(fr)
+  if type(fr) ~= "table" then return nil end
+  local e = clean(fr:GetEffectiveScale())
+  local l, t, r, b = clean(fr:GetLeft()), clean(fr:GetTop()), clean(fr:GetRight()), clean(fr:GetBottom())
+  if not (e and l and t) then return nil end
+  return l * e, t * e, r and r * e, b and b * e
+end
+T.ScreenRect = screenRect
+
+-- Is Blizzard's list really showing in our slot? true / false / nil (can't tell: not laid out yet).
+function T.ListInSlot()
+  local f = trainerFrame()
+  local sb = f and type(f.ScrollBox) == "table" and f.ScrollBox or nil
+  local slot = ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()
+  if not (sb and slot) then return nil end
+  local sl, st = screenRect(slot)
+  local bl, bt = screenRect(sb)
+  if not (sl and bl) then return nil end
+  if not sb:IsVisible() then return false, "list not visible" end
+  local alpha = sb.GetEffectiveAlpha and clean(sb:GetEffectiveAlpha())
+  if alpha and alpha < 0.5 then return false, ("list transparent (%.2f)"):format(alpha) end
+  if math.abs(sl - bl) > 3 or math.abs(st - bt) > 3 then
+    return false, ("list at %d,%d, slot at %d,%d"):format(bl, bt, sl, st)
+  end
+  return true
+end
+
 -- Moves Blizzard's window so its list's top-left corner sits on our list slot's top-left corner (screen pixels).
 function T.Align()
   local f = trainerFrame()
   local sb = f and type(f.ScrollBox) == "table" and f.ScrollBox or nil
   local slot = ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()
   if not (T.wrapped and sb and slot and slot:IsVisible()) then return end
-  local se, te = slot:GetEffectiveScale(), f:GetEffectiveScale()
+  local se, te, be = slot:GetEffectiveScale(), f:GetEffectiveScale(), sb:GetEffectiveScale()
   local sl, st, bl, bt, fl, ft = slot:GetLeft(), slot:GetTop(), sb:GetLeft(), sb:GetTop(), f:GetLeft(), f:GetTop()
-  if not (se and te and sl and st and bl and bt and fl and ft) then return end
-  local dx, dy = sl * se - bl * te, st * se - bt * te
+  if not (se and te and be and sl and st and bl and bt and fl and ft) then return end
+  local dx, dy = sl * se - bl * be, st * se - bt * be
   if math.abs(dx) < 0.5 and math.abs(dy) < 0.5 then return end
   f:ClearAllPoints()
   f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", fl + dx / te, ft + dy / te)
@@ -257,7 +303,23 @@ driver:SetScript("OnUpdate", function(_, dt)
   local f = trainerFrame()
   if T.wrapped and f then
     if f:GetAlpha() > 0 then f:SetAlpha(0) end
+    T.KeepListOnTop()
     T.Align() -- the window may have been moved (by us dragging, or Blizzard's panel layout)
+    if not T.wrapChecked and T.wrapAt and GetTime() - T.wrapAt > 1.0 then
+      local ok, why = T.ListInSlot()
+      if ok ~= nil then
+        T.wrapChecked = true
+        T.wrapProblem = (ok == false) and why or nil
+        if ok == false and not ns.InCombat() then
+          -- never leave an empty column: show Blizzard's whole window beside ours instead
+          ns.db.opts.replace = false
+          T.ApplyMode()
+          if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
+          ns.Print("Couldn't show Beast Training's list inside the window (" .. tostring(why) ..
+            "), so Blizzard's window is shown beside it. /ptp debug has details; /ptp replace tries again.")
+        end
+      end
+    end
   end
   acc = acc + dt
   if acc >= 0.25 then
@@ -762,6 +824,22 @@ function T.DebugReport()
     yes(trainerFrame() and trainerFrame().ScrollBox), yes(trainButton()), yes(closeButton())))
   ns.Print(("Filters API %s · tooltip IDs %s · craft API %s"):format(yes(SetTrainerServiceTypeFilter),
     yes(C_TooltipInfo and C_TooltipInfo.GetTrainerService), yes(GetCraftInfo)))
+  local tf = trainerFrame()
+  local sb = tf and type(tf.ScrollBox) == "table" and tf.ScrollBox or nil
+  local function fr(x)
+    if type(x) ~= "table" then return "none" end
+    local l, t, r, b = screenRect(x)
+    return ("%s/%s %s a=%.2f ign=%s at %s,%s-%s,%s"):format(tostring(x:GetFrameStrata()), tostring(x:GetFrameLevel()),
+      x:IsVisible() and "visible" or "hidden", (x.GetEffectiveAlpha and clean(x:GetEffectiveAlpha())) or -1,
+      tostring(x.IsIgnoringParentAlpha and x:IsIgnoringParentAlpha()), tostring(l and math.floor(l)), tostring(t and math.floor(t)),
+      tostring(r and math.floor(r)), tostring(b and math.floor(b)))
+  end
+  ns.Print(("Wrap: %s · mode %s · check: %s"):format(tostring(T.wrapped), T.WrapMode() and "inside" or "beside",
+    tostring(T.wrapProblem or (T.wrapChecked and "ok") or "not yet")))
+  ns.Print("  Blizzard window: " .. fr(tf))
+  ns.Print("  its list: " .. fr(sb))
+  ns.Print("  our slot: " .. fr(ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()))
+  ns.Print("  our window: " .. fr(ns.UI and ns.UI.frame))
   local rows = visibleRows()
   local list = {}
   for _, row in ipairs(rows) do

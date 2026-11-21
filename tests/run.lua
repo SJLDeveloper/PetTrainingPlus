@@ -499,4 +499,40 @@ check(ns.T.wrapped and tf:GetAlpha() == 0, "opened again: wrapped again")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
 check(not ns.T.wrapped and tf:GetAlpha() == 1, "Beast Training closed: unwrapped")
 check(#M.errors == 0, "no errors")
+-- 1.4.1: the list is put in the HIGH layer while wrapped (and back after); a list that doesn't show in the slot
+-- falls back to Blizzard's window beside ours
+ns.db.opts.replace = true
+tf.ScrollBox._strata, tf.ScrollBar._strata = "MEDIUM", "MEDIUM" -- as if they followed their parent's layer
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(0.5)
+check(tf.ScrollBox:GetFrameStrata() == "HIGH" and tf.ScrollBar:GetFrameStrata() == "HIGH", "wrapped: list and scroll bar raised to HIGH")
+-- geometry: the list did not land in the slot (e.g. it stayed where it was)
+local slot2 = ns.UI.ListSlot()
+slot2._left, slot2._top, slot2._eff = 700, 600, 1
+tf._left, tf._top, tf._eff = 16, 652, 1
+tf.ScrollBox._left, tf.ScrollBox._top, tf.ScrollBox._eff = 30, 580, 1
+tf.ScrollBox._effAlpha = 1
+-- make Align unable to move it (as if Blizzard put it back every time)
+local realAlign = ns.T.Align
+ns.T.Align = function() end
+M.advance(1.5)
+check(not ns.T.wrapped and ns.db.opts.replace == false and tf:GetAlpha() == 1, "list not in the slot: Blizzard's window shown beside ours instead")
+check(ns.T.wrapProblem and ns.T.wrapProblem:find("list at"), "problem recorded: " .. tostring(ns.T.wrapProblem))
+check(tf.ScrollBox:GetFrameStrata() == "MEDIUM", "unwrapped: list back in its own layer")
+check(M.prints[#M.prints]:find("beside it"), "chat explains the fallback")
+ns.T.Align = realAlign
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+-- geometry right: stays wrapped
+ns.db.opts.replace = true
+tf.ScrollBox._strata = "HIGH"
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW")
+tf.ScrollBox._left, tf.ScrollBox._top = 700, 600 -- the list sits exactly in the slot
+ns.T.Align = function() end
+M.advance(1.5)
+check(ns.T.wrapped and ns.T.wrapChecked and not ns.T.wrapProblem, "list in the slot: stays wrapped, check ok")
+ns.T.Align = realAlign
+slot2._left, slot2._top = nil, nil
+tf._left, tf._top, tf.ScrollBox._left, tf.ScrollBox._top = nil, nil, nil, nil
+SlashCmdList.PETTRAININGPLUS("debug"); SlashCmdList.PETTRAININGPLUS("debug")
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")
