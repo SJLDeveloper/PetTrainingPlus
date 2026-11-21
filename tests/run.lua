@@ -6,6 +6,11 @@ for _, file in ipairs({ "Data.lua", "Core.lua", "Trainer.lua", "Bestiary.lua", "
   local chunk = assert(loadfile(DIR .. file))
   chunk("PetTrainingPlus", ns)
 end
+local function wrappedLook()
+  -- wrapped: Blizzard's own parts transparent, its list opaque
+  return ClassTrainerTrainButton:GetAlpha() == 0 and ClassTrainerFrame.ScrollBox:GetAlpha() == 1
+end
+local function plainLook() return ClassTrainerTrainButton:GetAlpha() == 1 end
 local function check(cond, msg) if cond then print("PASS " .. msg) else print("FAIL " .. msg); M.failed = true end end
 
 -- English spell names for the ranks we use
@@ -50,8 +55,7 @@ M.rebuildRows()
 M.fire("TRAINER_SHOW")
 M.advance(2.5)
 check(ns.T.beast, "Beast Training detected")
-check(tf:GetAlpha() == 0 and tf.ScrollBox:IsIgnoringParentAlpha() and tf.ScrollBar:IsIgnoringParentAlpha(),
-  "wrapped: Blizzard's window invisible except its list and scroll bar")
+check(wrappedLook() and tf:GetAlpha() == 1, "wrapped: Blizzard's parts transparent, its window and list opaque")
 check(ns.UI.attached and ns.UI.frame:GetFrameStrata() == "MEDIUM", "our window attached, below the list's HIGH layer")
 check(ns.char.scanned[5], "full read with all filters on (boar)")
 check(M.filters.available and not M.filters.used and not M.filters.unavailable, "then the list shows what can be trained now")
@@ -100,7 +104,7 @@ check(ns.T.target == nil, "target cleared after training: " .. tostring(btn:GetT
 PetTrainingPlusCloseTrainer:GetAttribute("clickbutton"):Click()
 M.advance(0.5)
 check(not ns.T.beast, "Beast Training session ended")
-check(tf:GetAlpha() == 1, "Blizzard window alpha restored")
+check(plainLook(), "Blizzard window alpha restored")
 check(M.filters.used == false and M.filters.available and M.filters.unavailable, "player's filters restored")
 check(not ns.UI.attached, "window detached")
 
@@ -163,11 +167,11 @@ check(not ns.pendingPetRead, "pet read after combat")
 -- ESC closes our window while Beast Training is open: Blizzard's comes back
 tf:Show(); M.filters.used = true; M.rebuildRows()
 M.fire("TRAINER_SHOW"); M.advance(1)
-check(tf:GetAlpha() == 0, "ghosted again")
+check(wrappedLook(), "ghosted again")
 ns.UI.Hide()
-check(tf:GetAlpha() == 1, "hiding our window gives the Blizzard window back")
+check(plainLook(), "hiding our window gives the Blizzard window back")
 ns.UI.Show()
-check(tf:GetAlpha() == 0, "showing it again takes over again")
+check(wrappedLook(), "showing it again takes over again")
 
 -- NPC pet trainer (has an NPC, no TP label): "used" rows are known ranks
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
@@ -179,7 +183,7 @@ M.filters = { used = true, available = true, unavailable = true }
 tf:Show(); M.rebuildRows()
 M.fire("TRAINER_SHOW"); M.advance(1.5)
 check(not ns.T.beast and ns.T.npcTrainerOpen, "NPC trainer is not Beast Training")
-check(tf:GetAlpha() == 1, "NPC trainer not ghosted")
+check(plainLook(), "NPC trainer not ghosted")
 check(ns.IsKnown(ns.byKey["Great Stamina"].rankBy[4]) and not ns.IsKnown(ns.byKey["Great Stamina"].rankBy[5]), "NPC trainer: used = known only")
 M.fire("CHAT_MSG_SYSTEM", "You have learned a new spell: |cff71d5ff|Hspell:4199:0|h[Great Stamina (Rank 5)]|h|r.")
 M.advance(0.3)
@@ -355,12 +359,12 @@ add("Growl", 3, 14917, 20, 0); add("Bite", 4, 17257, 24, 10); add("Bite", 5, 172
 M.filters = { used = false, available = true, unavailable = true }
 tf:Show(); M.rebuildRows()
 M.fire("TRAINER_SHOW"); M.advance(2.5)
-check(tf:GetAlpha() == 0 and ns.T.wrapped, "wrapped")
+check(wrappedLook() and ns.T.wrapped, "wrapped")
 ns.UI.Select(bite, bite.rankBy[5]); M.advance(0.3)
 check(ns.T.state == "finding", "first moment: finding (" .. tostring(ns.T.state) .. ")")
 M.advance(2)
 check(ns.T.state == "scroll" and ns.T.scrollDir == "down", "Bite 5 is row 12 of 7 on screen: scroll down (" .. tostring(ns.T.state) .. ")")
-check(ns.T.wrapped and tf:GetAlpha() == 0, "the list stays in our window (nothing moves aside)")
+check(ns.T.wrapped and wrappedLook(), "the list stays in our window (nothing moves aside)")
 check(btn:GetText() == "Scroll down to Bite 5" and not btn:IsEnabled(), "button: " .. tostring(btn:GetText()))
 check(ns.UI.frame.footerText:GetText():find("mouse wheel"), "footer explains the scroll")
 -- the player scrolls the Blizzard list with the mouse wheel
@@ -379,12 +383,12 @@ ns.UI.Select(ns.byKey["Arcane Resistance"], ns.byKey["Arcane Resistance"].rankBy
 check(ns.T.state == "scroll" and ns.T.scrollDir == "up", "Arcane Resistance 1 above: scroll up")
 -- "Show Blizzard window": Blizzard's whole window beside ours; again: the list back in our window
 ns.UI.frame.blizz._scripts.OnClick(ns.UI.frame.blizz)
-check(not ns.T.wrapped and tf:GetAlpha() == 1 and not tf.ScrollBox:IsIgnoringParentAlpha(), "Show Blizzard window: whole window back")
+check(not ns.T.wrapped and plainLook(), "Show Blizzard window: whole window back")
 check(ns.UI.frame:GetFrameStrata() == "DIALOG", "docked: our window above")
 ns.UI.frame.blizz._scripts.OnClick(ns.UI.frame.blizz)
-check(ns.T.wrapped and tf:GetAlpha() == 0, "List in this window: wrapped again")
+check(ns.T.wrapped and wrappedLook(), "List in this window: wrapped again")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
-check(not ns.T.wrapped and tf:GetAlpha() == 1 and not tf.ScrollBox:IsIgnoringParentAlpha(), "closing Beast Training ends everything")
+check(not ns.T.wrapped and plainLook(), "closing Beast Training ends everything")
 check(#M.errors == 0, "no errors")
 -- 1.3.2: direct select. If the game answers SelectTrainerService with TRAINER_DESCRIPTION_UPDATE, the off-screen rank
 -- is selected by Blizzard's own handler: no scrolling, straight to Train.
@@ -395,7 +399,7 @@ M.fire("TRAINER_SHOW"); M.advance(2.5)
 M.descEvent = true
 ns.db.directNoEvent = 0
 ns.UI.Select(bite, bite.rankBy[5]); M.advance(2)
-check(ns.T.wrapped and tf:GetAlpha() == 0, "direct select: stays wrapped")
+check(ns.T.wrapped and wrappedLook(), "direct select: stays wrapped")
 check(ns.T.state == "train" and btn:GetText() == "Train Bite 5", "direct select: straight to Train (" .. tostring(btn:GetText()) .. ")")
 check(ns.T.directResult == "worked", "direct select recorded as working")
 press()
@@ -489,15 +493,15 @@ check(M.trained == "Bite Rank 4", "trained Bite 4")
 -- our window closed while Beast Training stays open: Blizzard's window comes back where it was
 ns.UI.Hide()
 local rp = { tf:GetPoint() }
-check(not ns.T.wrapped and tf:GetAlpha() == 1 and rp[2] == UIParent and rp[3] == "TOPLEFT" and rp[4] == 16 and rp[5] == -116,
+check(not ns.T.wrapped and plainLook() and rp[2] == UIParent and rp[3] == "TOPLEFT" and rp[4] == 16 and rp[5] == -116,
   "our window closed: Blizzard's window back in its own place")
 covers = 0
 for _, fr in ipairs(M.allFrames) do if rawget(fr, "_strata") == "HIGH" and rawget(fr, "_level") == 9000 and rawget(fr, "_shown") then covers = covers + 1 end end
 check(covers == 0, "covers removed")
 ns.UI.Show()
-check(ns.T.wrapped and tf:GetAlpha() == 0, "opened again: wrapped again")
+check(ns.T.wrapped and wrappedLook(), "opened again: wrapped again")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
-check(not ns.T.wrapped and tf:GetAlpha() == 1, "Beast Training closed: unwrapped")
+check(not ns.T.wrapped and plainLook(), "Beast Training closed: unwrapped")
 check(#M.errors == 0, "no errors")
 -- 1.4.1: the list is put in the HIGH layer while wrapped (and back after); a list that doesn't show in the slot
 -- falls back to Blizzard's window beside ours
@@ -515,7 +519,7 @@ tf.ScrollBox._effAlpha = 1
 local realAlign = ns.T.Align
 ns.T.Align = function() end
 M.advance(1.5)
-check(not ns.T.wrapped and ns.db.opts.replace == false and tf:GetAlpha() == 1, "list not in the slot: Blizzard's window shown beside ours instead")
+check(not ns.T.wrapped and ns.db.opts.replace == false and plainLook(), "list not in the slot: Blizzard's window shown beside ours instead")
 check(ns.T.wrapProblem and ns.T.wrapProblem:find("list at"), "problem recorded: " .. tostring(ns.T.wrapProblem))
 check(tf.ScrollBox:GetFrameStrata() == "MEDIUM", "unwrapped: list back in its own layer")
 check(M.prints[#M.prints]:find("beside it"), "chat explains the fallback")
@@ -539,22 +543,13 @@ check(#M.errors == 0, "no errors")
 ns.db.opts.replace = true
 tf.ScrollBox._strata, tf.ScrollBar._strata = "MEDIUM", "MEDIUM"
 for _, r in ipairs(M.rows) do r._strata = "MEDIUM" end
-local order = {}
-local realSetAlpha, realIgnore = tf.SetAlpha, tf.ScrollBox.SetIgnoreParentAlpha
-tf.SetAlpha = function(self, a) table.insert(order, "window " .. a); realSetAlpha(self, a) end
-tf.ScrollBox.SetIgnoreParentAlpha = function(self, v) table.insert(order, "list ignore " .. tostring(v)); realIgnore(self, v) end
 tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(0.3)
-local iIgnore, iHide
-for k, v in ipairs(order) do
-  if v == "list ignore true" and not iIgnore then iIgnore = k end
-  if v == "window 0" and not iHide then iHide = k end
-end
-check(iIgnore and iHide and iIgnore < iHide, "list ignores parent alpha before the window goes invisible (" .. table.concat(order, ", ") .. ")")
-M.advance(0.5)
-local allHigh = true
-for _, r in ipairs(M.rows) do if r._shown and r:GetFrameStrata() ~= "HIGH" then allHigh = false end end
-check(allHigh, "visible rows raised to HIGH too")
-tf.SetAlpha, tf.ScrollBox.SetIgnoreParentAlpha = nil, nil
+check(tf:GetAlpha() == 1 and tf.ScrollBox:GetAlpha() == 1 and tf.ScrollBar:GetAlpha() == 1, "window and list stay opaque")
+check(ClassTrainerTrainButton:GetAlpha() == 0 and ClassTrainerFrameCloseButton:GetAlpha() == 0 and tf.FilterDropdown:GetAlpha() == 0
+  and ClassTrainerFrameTrainingPointsLabel:GetAlpha() == 0, "every other part transparent")
+ClassTrainerTrainButton:SetAlpha(1) -- Blizzard shows a part again
+M.advance(0.3)
+check(ClassTrainerTrainButton:GetAlpha() == 0, "parts kept transparent")
 -- list in the slot but its rows transparent: dock instead
 slot2._left, slot2._top, slot2._eff = 700, 600, 1
 tf._left, tf._top, tf._eff = 16, 652, 1

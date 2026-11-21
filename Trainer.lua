@@ -17,8 +17,9 @@
 -- picked up the moment it appears.
 --
 -- v1.4: the wrapper. Blizzard's list (ScrollBox + ScrollBar, HIGH strata, children of the movable ClassTrainerFrame)
--- is kept visible with SetIgnoreParentAlpha while the rest of the window is invisible, and the window is moved so the
--- list sits in the right-hand column of Pet Training+. Moving it, its alpha and drawing order write nothing that
+-- stays visible while every other part of the window is made transparent (v1.4.3; a transparent window with
+-- SetIgnoreParentAlpha on its list drew nothing in Forever), and the window is moved so the list sits in the
+-- right-hand column of Pet Training+. Moving it, its alpha and drawing order write nothing that
 -- Blizzard's Lua reads, so Train stays untainted. Its own Train, close and filter buttons are covered.
 local _, ns = ...
 local T = {}
@@ -208,21 +209,16 @@ function T.Wrap(on)
       T.wrapChecked = false
     end
     T.wrapped = true
-    -- order matters: the list ignores its parent's alpha first, then the window goes invisible
-    for _, fr in ipairs({ sb, bar }) do
-      if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(true) end
-    end
-    f:SetAlpha(0)
-    T.RefreshListAlpha()
+    -- The window itself stays opaque (a fully transparent window drew none of its list on Forever, even with
+    -- SetIgnoreParentAlpha). Instead every other part of it is made transparent, one by one.
+    T.HideParts()
     T.KeepListOnTop(true)
     for _, b in ipairs(blizzardButtons()) do coverFor(b):Show() end
     T.Align()
   else
     if T.wrapped and T.saved then
       f:SetAlpha(T.saved.alpha or 1)
-      for _, fr in ipairs({ sb, bar }) do
-        if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(false) end
-      end
+      for part, a in pairs(T.saved.parts or {}) do part:SetAlpha(a) end
       -- every frame we raised goes back to the layer it had (rows to their scroll target's)
       local tgt = sb and type(sb.ScrollTarget) == "table" and sb.ScrollTarget or nil
       for fr, st in pairs(T.saved.strata or {}) do
@@ -245,18 +241,28 @@ function T.Wrap(on)
   end
 end
 
--- Re-sets the list's own alpha so the game recomputes it for every row inside (rows created while the window was
--- invisible could otherwise keep an alpha of 0).
-function T.RefreshListAlpha()
+-- Every part of Blizzard's window except its list and scroll bar: its own textures and font strings, and its child
+-- frames (title, portrait, frame art, insets, buttons, training points...). Saved alphas come back on unwrap.
+function T.HideParts()
   local f = trainerFrame()
-  if not f then return end
-  for _, fr in ipairs({ f.ScrollBox, f.ScrollBar }) do
-    if type(fr) == "table" and fr.SetAlpha then
-      local a = clean(fr:GetAlpha()) or 1
-      if a < 0.05 then a = 1 end
-      fr:SetAlpha(a > 0.5 and a - 0.01 or a + 0.01)
-      fr:SetAlpha(a)
+  if not (f and T.saved) then return end
+  local sb, bar = f.ScrollBox, f.ScrollBar
+  T.saved.parts = T.saved.parts or {}
+  local parts = {}
+  for _, r in ipairs({ f:GetRegions() }) do parts[#parts + 1] = r end
+  for _, c in ipairs({ f:GetChildren() }) do
+    if c ~= sb and c ~= bar then parts[#parts + 1] = c end
+  end
+  for _, part in ipairs(parts) do
+    if part.SetAlpha and part.GetAlpha then
+      if T.saved.parts[part] == nil then T.saved.parts[part] = clean(part:GetAlpha()) or 1 end
+      if part:GetAlpha() ~= 0 then part:SetAlpha(0) end
     end
+  end
+  -- the window itself and its list: fully opaque
+  if f:GetAlpha() ~= 1 then f:SetAlpha(1) end
+  for _, fr in ipairs({ sb, bar }) do
+    if type(fr) == "table" and fr.GetAlpha and fr:GetAlpha() ~= 1 then fr:SetAlpha(1) end
   end
 end
 
@@ -342,7 +348,6 @@ local acc = 0
 driver:SetScript("OnUpdate", function(_, dt)
   local f = trainerFrame()
   if T.wrapped and f then
-    if f:GetAlpha() > 0 then f:SetAlpha(0); T.RefreshListAlpha() end
     T.KeepListOnTop()
     T.Align() -- the window may have been moved (by us dragging, or Blizzard's panel layout)
     if not T.wrapChecked and T.wrapAt and GetTime() - T.wrapAt > 1.0 then
@@ -365,7 +370,10 @@ driver:SetScript("OnUpdate", function(_, dt)
   if acc >= 0.25 then
     acc = 0
     if T.beast and not (f and f:IsShown()) then T.EndBeast(); return end
-    if T.wrapped then T.KeepListOnTop(true) end
+    if T.wrapped then
+      T.HideParts() -- Blizzard may show or fade its parts again
+      T.KeepListOnTop(true)
+    end
     T.FollowWindowSelection()
     T.UpdateTrainButton()
   end
