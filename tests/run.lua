@@ -173,9 +173,11 @@ tf:Show(); M.filters.used = true; M.rebuildRows()
 M.fire("TRAINER_SHOW"); M.advance(1)
 check(wrappedLook(), "ghosted again")
 ns.UI.Hide()
-check(plainLook(), "hiding our window gives the Blizzard window back")
+check(ns.UI.frame:IsShown() and wrappedLook(), "while Beast Training is open our window can't be closed on its own")
+ns.UI.Hide(true)
+check(plainLook(), "forced close (our own X without Blizzard's): border gone")
 ns.UI.Show()
-check(wrappedLook(), "showing it again takes over again")
+check(wrappedLook(), "shown again: framed again")
 
 -- NPC pet trainer (has an NPC, no TP label): "used" rows are known ranks
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
@@ -238,6 +240,7 @@ M.advance(0.3)
 check(ns.char.log[#ns.char.log].key ~= "Harass", "a Harass learn message is ignored")
 check(#M.errors == 0, "no errors")
 -- 1.2 pet toggle: hide what the current pet can't learn
+ns.UI.Show()
 ns.db.opts.filter = "all"
 M.units.npc = nil
 M.units.pet = { name = "Fang", level = 17, guid = "Pet-0-1-2-3-165189-0400AB", fam = 5, famName = "Boar" }
@@ -478,11 +481,26 @@ check(ns.UI.state.ability == bite and ns.UI.state.rank == bite.rankBy[4], "click
 check(btn:GetText() == "Train Bite 4", "Train ready: " .. tostring(btn:GetText()))
 press()
 check(M.trained == "Bite Rank 4", "trained Bite 4")
-ns.UI.Hide()
+ns.UI.Hide(true)
 check(plainLook() and not ns.T.wrapped, "our window closed: border gone, Blizzard's window as it was")
 ns.UI.Show()
 check(wrappedLook(), "opened again: framed again")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
 check(plainLook() and not ns.UI.attached, "Beast Training closed: our window on its own again")
+check(#M.errors == 0, "no errors")
+-- 1.5.1: ESC. Outside Beast Training we're a UISpecialFrame; with it open we're not, ESC closes Blizzard's window and
+-- ours goes with it.
+local function inEsc() for _, n in ipairs(UISpecialFrames) do if n == "PetTrainingPlusFrame" then return true end end return false end
+check(not ns.UI.attached and inEsc(), "on our own: ESC closes Pet Training+")
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(1)
+check(ns.UI.attached and ns.UI.frame:IsShown() and not inEsc(), "Beast Training open: ESC is left to Blizzard's window")
+-- ESC: the game closes the special frames (not us), then the UI panels (Blizzard's window)
+for _, n in ipairs(UISpecialFrames) do if _G[n] and _G[n].Hide then _G[n]:Hide() end end
+check(ns.UI.frame:IsShown(), "ESC didn't close us out of step")
+tf:Hide(); M.fire("TRAINER_CLOSED"); M.advance(0.5)
+check(not ns.UI.frame:IsShown() and not backShown(), "Blizzard's window closed: Pet Training+ closed with it")
+check(inEsc(), "back on the ESC list")
+ns.UI.Show(); ns.UI.Hide()
+check(not ns.UI.frame:IsShown(), "on our own, Hide works as before")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

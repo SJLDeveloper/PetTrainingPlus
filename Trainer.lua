@@ -463,7 +463,7 @@ function T.CreateSecureButtons(parent)
   closeBtn:SetAttribute("type", "click")
   closeBtn:HookScript("PostClick", function()
     -- no close button found: close the old way
-    if not closeBtn:GetAttribute("clickbutton") and ns.UI then ns.UI.Hide() end
+    if not closeBtn:GetAttribute("clickbutton") and ns.UI then ns.UI.Hide(true) end
   end)
   closeBtn:Hide()
   actionBtn:Hide()

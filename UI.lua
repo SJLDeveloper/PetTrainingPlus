@@ -1183,7 +1183,7 @@ function UI.Init()
 
   f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
   f.close:SetPoint("TOPRIGHT", 0, 0)
-  f.close:SetScript("OnClick", function() UI.Hide() end)
+  f.close:SetScript("OnClick", function() UI.Hide(true) end)
 
   -- (the button that switches between the wrapped list and Blizzard's whole window sits by the tabs, built below)
 
@@ -1308,8 +1308,24 @@ function UI.Show(tab)
   UI.Refresh()
 end
 
-function UI.Hide()
-  if f then f:Hide() end
+-- ESC: on our own we're one of the UISpecialFrames; while Beast Training is open we leave that list, so ESC closes
+-- Blizzard's window (a UI panel) and we close with it (TRAINER_CLOSED), instead of the two closing out of step.
+local function setEscClose(on)
+  for i = #UISpecialFrames, 1, -1 do
+    if UISpecialFrames[i] == "PetTrainingPlusFrame" then table.remove(UISpecialFrames, i) end
+  end
+  if on then table.insert(UISpecialFrames, "PetTrainingPlusFrame") end
+end
+UI.SetEscClose = setEscClose
+
+-- While attached to Beast Training, our window lives and dies with Blizzard's: close that to close both.
+function UI.Hide(force)
+  if not f then return end
+  if UI.attached and T.beast and not force then
+    ns.Print("Pet Training+ stays open with Beast Training: close Beast Training (Esc or the X) to close both.")
+    return
+  end
+  f:Hide()
 end
 
 function UI.Toggle()
@@ -1322,6 +1338,7 @@ function UI.AttachToTrainer(trainer, framed)
   if not f or not trainer then return end
   if not UI.attached then UI.wasShown = f:IsShown() end
   UI.attached = true
+  setEscClose(false)
   UI.ApplyLayout()
   f:ClearAllPoints()
   -- beside Blizzard's window, tops level (framed: a little gap for the shared border)
@@ -1356,13 +1373,14 @@ end
 
 function UI.OnTrainerClosed()
   if not f then return end
-  local was = UI.wasShown
   UI.attached = false
   UI.wasShown = nil
+  setEscClose(true)
   f:SetFrameStrata("HIGH")
   UI.ApplyLayout() -- the full screen width is available again
   restorePosition()
-  if not was then f:Hide() end
+  -- linked: Beast Training closed, Pet Training+ closes too (open it again any time with /ptp)
+  f:Hide()
   placeSecure()
   UI.Refresh()
 end
