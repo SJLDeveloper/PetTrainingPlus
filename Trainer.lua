@@ -13,8 +13,13 @@
 -- ScrollBox list (no categories for pet trainers) with 47-px rows in a 330-px box, so only about 7 rows exist at a
 -- time. A row button carries its service index (GetID) and display index (.displayIndex). Its scroll bar arrows react to
 -- OnMouseDown only, so a secure click can't scroll it, and scrolling it from addon code taints Train. When the chosen
--- rank is off screen, Pet Training+ shows the Blizzard list beside its window ("peek") and asks you to scroll it with
--- the mouse wheel; the row is picked up the moment it appears.
+-- rank is off screen, Pet Training+ outlines the list and asks you to scroll it with the mouse wheel; the row is
+-- picked up the moment it appears.
+--
+-- v1.4: the wrapper. Blizzard's list (ScrollBox + ScrollBar, HIGH strata, children of the movable ClassTrainerFrame)
+-- is kept visible with SetIgnoreParentAlpha while the rest of the window is invisible, and the window is moved so the
+-- list sits in the right-hand column of Pet Training+. Moving it, its alpha and drawing order write nothing that
+-- Blizzard's Lua reads, so Train stays untainted. Its own Train, close and filter buttons are covered.
 local _, ns = ...
 local T = {}
 ns.T = T
@@ -27,7 +32,7 @@ T.live = nil          -- [petSpellID] = { status, lvl, tp, name, rankText } from
 T.liveFam = nil
 T.beast = false       -- Beast Training is open
 T.npcTrainerOpen = false
-T.ghosted = false
+T.wrapped = false
 
 local function trainerFrame() return _G.ClassTrainerFrame end
 
@@ -154,54 +159,94 @@ function T.Scan(mode)
 end
 
 -- ------------------------------------------------------------------ ghosting the Blizzard window
-local blocker
-local function getBlocker()
-  if blocker then return blocker end
-  blocker = CreateFrame("Frame", nil, UIParent)
-  blocker:EnableMouse(true)
-  if blocker.EnableMouseWheel then blocker:EnableMouseWheel(true) end
-  blocker:SetScript("OnMouseWheel", function() end)
-  blocker:Hide()
-  return blocker
+-- Covers Blizzard's own (invisible) Train, close and filter buttons, so nothing hidden can be clicked.
+local covers = {}
+local function coverFor(target)
+  local c = covers[target]
+  if not c then
+    c = CreateFrame("Frame", nil, UIParent)
+    c:EnableMouse(true)
+    if c.EnableMouseWheel then c:EnableMouseWheel(true) end
+    c:SetScript("OnMouseWheel", function() end)
+    covers[target] = c
+  end
+  c:ClearAllPoints()
+  c:SetAllPoints(target)
+  c:SetFrameStrata("HIGH")
+  c:SetFrameLevel(9000)
+  return c
 end
 
-function T.Ghost(on)
+local function blizzardButtons()
+  local f = trainerFrame()
+  if not f then return {} end
+  local list = {}
+  for _, b in ipairs({ _G.ClassTrainerTrainButton or f.TrainButton, _G.ClassTrainerFrameCloseButton or f.CloseButton,
+      f.FilterDropdown }) do
+    if type(b) == "table" then list[#list + 1] = b end
+  end
+  return list
+end
+
+-- Wrap: only Blizzard's list shows, in our right-hand column.
+function T.Wrap(on)
   local f = trainerFrame()
   if not f then return end
+  local sb = type(f.ScrollBox) == "table" and f.ScrollBox or nil
+  local bar = type(f.ScrollBar) == "table" and f.ScrollBar or nil
   if on then
-    if not T.ghosted then T.savedAlpha = f:GetAlpha() end
-    T.ghosted = true
+    if not T.wrapped then
+      local pts = {}
+      for i = 1, (f.GetNumPoints and f:GetNumPoints() or 0) do pts[i] = { f:GetPoint(i) } end
+      T.saved = { alpha = f:GetAlpha(), points = pts }
+    end
+    T.wrapped = true
     f:SetAlpha(0)
-    local b = getBlocker()
-    b:ClearAllPoints()
-    b:SetAllPoints(f)
-    -- Forever's list and scroll bar are HIGH strata inside the MEDIUM window: cover them too
-    b:SetFrameStrata("HIGH")
-    b:SetFrameLevel(9000)
-    b:Show()
+    for _, fr in ipairs({ sb, bar }) do
+      if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(true) end
+    end
+    for _, b in ipairs(blizzardButtons()) do coverFor(b):Show() end
+    T.Align()
   else
-    if T.ghosted then f:SetAlpha(T.savedAlpha or 1) end
-    T.ghosted = false
-    if blocker then blocker:Hide() end
+    if T.wrapped and T.saved then
+      f:SetAlpha(T.saved.alpha or 1)
+      for _, fr in ipairs({ sb, bar }) do
+        if fr and fr.SetIgnoreParentAlpha then fr:SetIgnoreParentAlpha(false) end
+      end
+      if #T.saved.points > 0 then
+        f:ClearAllPoints()
+        for _, pt in ipairs(T.saved.points) do f:SetPoint(unpack(pt)) end
+      end
+    end
+    T.wrapped = false
+    T.saved = nil
+    for _, c in pairs(covers) do c:Hide() end
   end
 end
 
-function T.ReplaceMode() return ns.db.opts.replace and not T.peeking end
+-- Moves Blizzard's window so its list's top-left corner sits on our list slot's top-left corner (screen pixels).
+function T.Align()
+  local f = trainerFrame()
+  local sb = f and type(f.ScrollBox) == "table" and f.ScrollBox or nil
+  local slot = ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()
+  if not (T.wrapped and sb and slot and slot:IsVisible()) then return end
+  local se, te = slot:GetEffectiveScale(), f:GetEffectiveScale()
+  local sl, st, bl, bt, fl, ft = slot:GetLeft(), slot:GetTop(), sb:GetLeft(), sb:GetTop(), f:GetLeft(), f:GetTop()
+  if not (se and te and sl and st and bl and bt and fl and ft) then return end
+  local dx, dy = sl * se - bl * te, st * se - bt * te
+  if math.abs(dx) < 0.5 and math.abs(dy) < 0.5 then return end
+  f:ClearAllPoints()
+  f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", fl + dx / te, ft + dy / te)
+end
+
+function T.WrapMode() return ns.db.opts.replace and true or false end
+T.ReplaceMode = T.WrapMode
 
 function T.ApplyMode()
   if not T.beast then return end
-  T.Ghost(T.ReplaceMode())
-  if ns.UI and ns.UI.AttachToTrainer then ns.UI.AttachToTrainer(trainerFrame(), T.ReplaceMode()) end
-end
-
--- Peek: the Blizzard list is shown beside our window so you can scroll it (stays on until Beast Training closes or
--- you hide it again).
-function T.Peek(on)
-  on = on and true or false
-  if T.peeking == on or ns.InCombat() then return end
-  T.peeking = on
-  T.ApplyMode()
-  if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
+  local wrap = T.WrapMode() and ns.UI and ns.UI.frame and ns.UI.frame:IsShown()
+  if ns.UI and ns.UI.AttachToTrainer then ns.UI.AttachToTrainer(trainerFrame(), T.WrapMode()) end
+  T.Wrap(wrap)
 end
 
 -- ------------------------------------------------------------------ session
@@ -210,11 +255,15 @@ driver:Hide()
 local acc = 0
 driver:SetScript("OnUpdate", function(_, dt)
   local f = trainerFrame()
-  if T.ghosted and f and f:GetAlpha() > 0 then f:SetAlpha(0) end
+  if T.wrapped and f then
+    if f:GetAlpha() > 0 then f:SetAlpha(0) end
+    T.Align() -- the window may have been moved (by us dragging, or Blizzard's panel layout)
+  end
   acc = acc + dt
   if acc >= 0.25 then
     acc = 0
     if T.beast and not (f and f:IsShown()) then T.EndBeast(); return end
+    T.FollowWindowSelection()
     T.UpdateTrainButton()
   end
 end)
@@ -223,23 +272,29 @@ function T.BeginBeast()
   local fresh = not T.beast
   T.beast, T.npcTrainerOpen = true, false
   T.target, T.mode = nil, "select"
-  if fresh then T.ShowAllRows() end
   ns.ReadPet()
+  -- a new session, or Beast Training shown again for another pet: read everything again
+  if fresh or (ns.pet and T.liveFam ~= ns.pet.fam) then
+    if not fresh then T.availOnly = false end
+    T.ShowAllRows()
+  end
   T.ApplyMode()
   if ns.UI and ns.UI.ShowForTrainer then ns.UI.ShowForTrainer() end
   driver:Show()
   for _, d in ipairs({ 0.3, 1.0, 2.0 }) do
     ns.After(d, function() if T.beast and not T.availOnly then T.Scan("beast") end end)
   end
+  -- after reading everything you know, the list shows what can be trained now
+  ns.After(2.3, function() if T.beast and not T.availOnly then T.ShowAvailableOnly() end end)
 end
 
 function T.EndBeast()
   if not T.beast then return end
   T.beast = false
   T.target, T.mode = nil, "select"
-  T.peeking = false
   T.ShowGlow(nil)
-  T.Ghost(false)
+  T.Wrap(false)
+  T.lastWindowSel = nil
   restoreFilters()
   driver:Hide()
   T.SetSecure(nil)
@@ -506,6 +561,24 @@ function T.AfterTrain(r, tries)
   end
 end
 
+-- You clicked a row in Blizzard's list: our window follows (skill, rank and Train button).
+function T.FollowWindowSelection()
+  local f = trainerFrame()
+  if not (T.beast and f) or ns.InCombat() then return end
+  local sel = f.selectedService
+  if sel == T.lastWindowSel then return end
+  T.lastWindowSel = sel
+  if not sel then return end
+  local map = f.displayIndexToSkillIndex
+  local idx = (type(map) == "table" and map[sel]) or sel
+  local name, _, _, _, rankText = try(GetTrainerServiceInfo, idx)
+  local a = ns.FindAbility(name)
+  local r = a and a.rankBy[ns.RankNumber(rankText) or 0]
+  if r and not (T.target and T.target.r == r) and ns.UI and ns.UI.SelectFromTrainer then
+    ns.UI.SelectFromTrainer(r)
+  end
+end
+
 -- Chosen rank for the Train button (from the window).
 function T.SetTarget(r)
   if not T.beast or ns.InCombat() then return end
@@ -529,7 +602,7 @@ end
 -- Blizzard's Train button trains ClassTrainerFrame.selectedService, on screen or not. Besides a row click, Blizzard sets
 -- it in its TRAINER_DESCRIPTION_UPDATE handler, from the game's own selection (SelectTrainerService), which an addon may
 -- set. If that event follows our SelectTrainerService, Blizzard selects the off-screen rank itself, untainted.
--- We only go on to Train when the game reports the selection as secure (issecurevariable); otherwise: peek and scroll.
+-- We only go on to Train when the game reports the selection as secure (issecurevariable); otherwise: scroll.
 local DIRECT_WAIT = 1.2
 T.descEvents = 0
 ns.On("TRAINER_DESCRIPTION_UPDATE", function() T.descEvents = T.descEvents + 1; T.lastDescAt = GetTime() end)
@@ -605,7 +678,9 @@ function T.UpdateTrainButton(fromClick)
         actionBtn:SetAttribute("clickbutton", row)
         label, enabled = "Select " .. nm, true
         T.state = "select"
-        if T.peeking then T.ShowGlow(row) else T.ShowGlow(nil) end
+        T.ShowGlow(row)
+        -- already selected in Blizzard's list (you clicked it there): straight to Train
+        if selectionMatches() then T.mode = "train"; ns.After(0, T.UpdateTrainButton) end
       else
         actionBtn:SetAttribute("clickbutton", nil)
         T.scrollDir = dir
@@ -638,13 +713,12 @@ function T.UpdateTrainButton(fromClick)
         if direct or waitingDirect then
           label, enabled = "Finding " .. nm .. "…", false
           T.state = "finding"
-        elseif GetTime() - (t.at or 0) < 0.7 and not T.peeking then
+        elseif GetTime() - (t.at or 0) < 0.7 then
           -- the list redraws a moment after the filter change
           label, enabled = "Finding " .. nm .. "…", false
           T.state = "finding"
         else
-          -- off screen: show the Blizzard list beside ours so it can be scrolled with the mouse wheel
-          if not T.peeking then T.Peek(true) end
+          -- off screen: outline Blizzard's list and say which way to scroll it
           local f = trainerFrame()
           local box = f and (f.ScrollBox or f)
           T.ShowGlow(box, ("Scroll %s to %s"):format(dir == "up" and "up" or "down", nm))

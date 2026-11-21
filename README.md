@@ -14,9 +14,11 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 - **Learn Log.** At the moment the game says "You have learned a new spell", Pet Training+ writes down
   the skill and rank, the creature your pet was tamed from (name, level, NPC ID, where it was tamed and when),
   your pet's name and level, and where you were. Tames are logged too, with what the beast knew.
-- **Takes the place of Beast Training.** When you cast Beast Training, the Blizzard window is made invisible
-  and Pet Training+ sits on top of it. Pick a rank marked Trainable and press the Train button twice:
-  the first press selects the rank, the second trains it.
+- **Beast Training inside the window.** When you cast Beast Training, Blizzard's window disappears and its list of
+  ranks you can train now appears in Pet Training+'s right-hand column: your skills on the left, the skill's ranks and
+  details in the middle, Blizzard's list on the right. Click a rank on the left or in that list, then press Train (the
+  first press selects the rank in Blizzard's list, the second trains it; a rank you clicked in the list trains in one
+  press). The list is Blizzard's own, so it scrolls with the mouse wheel like any list.
 
 - **Forever Bestiary link.** Right-click any skill (its line, a rank box, a rank row or a log entry), or use
   **View in Bestiary**, to open that ability in Forever Bestiary (Pet Hunter) exactly as if you had clicked it in its
@@ -27,7 +29,8 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 - `/ptp`: open or close the window
 - `/ptp log`: open the Learn Log
 - `/ptp origin`: for a pet tamed before you installed this, target a beast of the same kind and use this to set its origin
-- `/ptp dock` or `/ptp replace`: show the window next to Blizzard's Beast Training, or in its place (the default)
+- `/ptp dock` or `/ptp replace`: Blizzard's whole Beast Training window beside Pet Training+, or only its list inside
+  Pet Training+ (the default)
 - `/ptp resetpos`: put the window back in its default places (it can be dragged anywhere, and remembers a
   separate spot for when Beast Training is open)
 - `/ptp scale 1.3`: window size (text included); 1.3 is the default, capped to fit your screen
@@ -40,9 +43,10 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
   family you use, and Pet Training+ fills in everything you know. After that, new ranks are picked up from the
   learn message as you play.
 - Training has to go through Blizzard's own Train button, because addons are not allowed to train pets directly.
-  That is why Train takes two presses. Blizzard's Beast Training list only shows about 7 rows at a time and addons
-  can't scroll it, so when the rank you picked is further down, Pet Training+ shows Blizzard's list beside its window
-  and highlights it: scroll it with the mouse wheel until the rank lights up, then press Select and Train.
+  That is why Train can take two presses, and why Blizzard's own list is part of the window: it only shows about
+  7 rows at a time and an addon can't scroll it for you, so when the rank you picked is further down, scroll the list
+  on the right with the mouse wheel until it lights up. "Show Blizzard window" puts Blizzard's whole window back
+  beside Pet Training+ instead (`/ptp dock`; `/ptp replace` for the list inside).
 - If you close Pet Training+ while Beast Training is open, the Blizzard window comes back.
 
 ## Credits

@@ -111,6 +111,16 @@ function Frame:Disable() self._enabled = false end
 function Frame:GetHeight() return rawget(self, "_h") or 900 end
 function Frame:SetScale(v) self._scale = v end
 function Frame:GetScale() return rawget(self, "_scale") or 1 end
+function Frame:SetIgnoreParentAlpha(v) self._ignoreParentAlpha = v end
+function Frame:IsIgnoringParentAlpha() return rawget(self, "_ignoreParentAlpha") or false end
+function Frame:GetNumPoints() return rawget(self, "_point") and 1 or 0 end
+function Frame:GetLeft() return rawget(self, "_left") end
+function Frame:GetTop() return rawget(self, "_top") end
+function Frame:GetEffectiveScale() return rawget(self, "_eff") or 1 end
+function Frame:GetWidth() return rawget(self, "_w") or 100 end
+function Frame:SetWidth(v) self._w = v end
+function Frame:SetSize(w, h) self._w, self._h = w, h end
+function Frame:ClearAllPoints() self._point = nil end
 function Frame:GetID() return rawget(self, "_id") or 0 end
 function Frame:SetID(v) self._id = v end
 function Frame:Click()
@@ -126,6 +136,7 @@ end
 
 -- environment
 UIParent = CreateFrame("Frame", "UIParent")
+UIParent._w, UIParent._h = 1365, 768 -- a 16:9 screen in UI units
 UISpecialFrames = {}
 DEFAULT_CHAT_FRAME = { AddMessage = function(_, m) table.insert(M.prints, m); print("CHAT: " .. m) end }
 GameTooltip = setmetatable({ _shown = false, _scripts = {}, _children = {}, _regions = {} }, Frame)
@@ -213,6 +224,10 @@ function M.makeTrainer()
   f._shown = false
   local label = CreateFrame("Frame", "ClassTrainerFrameTrainingPointsLabel", f)
   f.ScrollBox = CreateFrame("Frame", nil, f)
+  f.ScrollBox._w, f.ScrollBox._h = 302, 330 -- Forever's XML
+  f.ScrollBar = CreateFrame("EventFrame", nil, f)
+  f.ScrollBar._w = 9
+  f.FilterDropdown = CreateFrame("DropdownButton", nil, f)
   local train = CreateFrame("Button", "ClassTrainerTrainButton", f)
   -- like ClassTrainerTrainButton_OnClick: buys the window's selectedService
   train:SetScript("OnClick", function()
