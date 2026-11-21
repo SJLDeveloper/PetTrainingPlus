@@ -419,8 +419,9 @@ local function selectionMatches()
   local sel = try(GetTrainerSelectionIndex)
   if not sel or sel == 0 then return false end
   local name, _, _, _, rankText = try(GetTrainerServiceInfo, sel)
-  if name ~= T.target.name then return false end
-  return ns.RankNumber(rankText) == T.target.r.r
+  if name ~= T.target.name or ns.RankNumber(rankText) ~= T.target.r.r then return false end
+  -- Train buys what Blizzard's window has selected: it must be this rank too, and untainted
+  return (T.WindowSelects(sel))
 end
 
 -- The action button (Select / Train / Open Beast Training) and the close button over our X.
@@ -524,6 +525,44 @@ function T.SetTarget(r)
   T.UpdateTrainButton()
 end
 
+-- ------------------------------------------------------------------ direct select (no scrolling)
+-- Blizzard's Train button trains ClassTrainerFrame.selectedService, on screen or not. Besides a row click, Blizzard sets
+-- it in its TRAINER_DESCRIPTION_UPDATE handler, from the game's own selection (SelectTrainerService), which an addon may
+-- set. If that event follows our SelectTrainerService, Blizzard selects the off-screen rank itself, untainted.
+-- We only go on to Train when the game reports the selection as secure (issecurevariable); otherwise: peek and scroll.
+local DIRECT_WAIT = 1.2
+T.descEvents = 0
+ns.On("TRAINER_DESCRIPTION_UPDATE", function() T.descEvents = T.descEvents + 1; T.lastDescAt = GetTime() end)
+
+local function secure(tbl, key)
+  if not issecurevariable then return true end
+  local ok, isSecure = pcall(issecurevariable, tbl, key)
+  return ok and isSecure and true or false
+end
+
+-- Does Blizzard's window have this service selected, cleanly?
+function T.WindowSelects(idx)
+  local f = trainerFrame()
+  if not (f and idx) then return false, "no window" end
+  local sel = f.selectedService
+  if not sel then return false, "nothing selected" end
+  local map = f.displayIndexToSkillIndex
+  local skill = (type(map) == "table" and map[sel]) or sel
+  if skill ~= idx then return false, "other row selected" end
+  if not secure(f, "selectedService") or (map and not secure(f, "displayIndexToSkillIndex")) then
+    return false, "tainted"
+  end
+  return true
+end
+
+function T.TryDirect(t)
+  local idx = T.CurrentIndex(t.name, t.r.r)
+  if not (idx and SelectTrainerService) then return false end
+  t.directIdx, t.directAt, t.directEvents = idx, GetTime(), T.descEvents
+  pcall(SelectTrainerService, idx)
+  return true
+end
+
 -- Re-points the action button. out of combat only.
 function T.UpdateTrainButton(fromClick)
   if not actionBtn or ns.InCombat() then return end
@@ -570,7 +609,32 @@ function T.UpdateTrainButton(fromClick)
       else
         actionBtn:SetAttribute("clickbutton", nil)
         T.scrollDir = dir
-        if GetTime() - (t.at or 0) < 0.7 and not T.peeking then
+        if not t.directAt and GetTime() - (t.at or 0) >= 0.4 then T.TryDirect(t) end
+        local waitingDirect = t.directAt and GetTime() - t.directAt < DIRECT_WAIT
+        local direct, why = false, nil
+        if t.directAt then direct, why = T.WindowSelects(t.directIdx) end
+        if direct and not t.directDone then
+          -- Blizzard selected it for us: straight to Train
+          t.directDone = true
+          T.directResult = "worked"
+          if not ns.db.directWorked then
+            ns.db.directWorked = true
+            ns.Print("|cff9cff7aGood news:|r ranks off screen in Beast Training can be selected without scrolling on your client.")
+          end
+          T.mode = "train"
+          ns.After(0, T.UpdateTrainButton)
+        elseif t.directAt and not waitingDirect and not t.directReported then
+          t.directReported = true
+          T.directResult = (T.descEvents > (t.directEvents or 0)) and ("event came, " .. tostring(why)) or "no event"
+          if not ns.db.directWorked and not T.directToldNo then
+            T.directToldNo = true
+            ns.Print("Ranks off screen can't be selected directly here (" .. T.directResult .. "): use the scroll view. /ptp debug has details.")
+          end
+        end
+        if direct or waitingDirect then
+          label, enabled = "Finding " .. nm .. "…", false
+          T.state = "finding"
+        elseif GetTime() - (t.at or 0) < 0.7 and not T.peeking then
           -- the list redraws a moment after the filter change
           label, enabled = "Finding " .. nm .. "…", false
           T.state = "finding"
@@ -627,6 +691,8 @@ function T.DebugReport()
     list[#list + 1] = tostring(row[2]) .. "=" .. table.concat(texts, "/")
   end
   ns.Print(("%d rows on screen: %s"):format(#rows, table.concat(list, " · ")))
+  ns.Print(("Direct select (no scrolling): %s · TRAINER_DESCRIPTION_UPDATE seen %d times"):format(
+    tostring(T.directResult or "not tried yet"), T.descEvents or 0))
   if T.target then
     ns.Print(("Target %s %s · index now %s · state %s"):format(tostring(T.target.name), tostring(T.target.rankText),
       tostring(T.CurrentIndex(T.target.name, T.target.r.r)), tostring(T.state)))

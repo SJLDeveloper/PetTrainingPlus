@@ -356,7 +356,7 @@ M.fire("TRAINER_SHOW"); M.advance(2.5)
 check(tf:GetAlpha() == 0 and not ns.T.peeking, "replace mode, not peeking")
 ns.UI.Select(bite, bite.rankBy[5]); M.advance(0.3)
 check(ns.T.state == "finding", "first moment: finding (" .. tostring(ns.T.state) .. ")")
-M.advance(1)
+M.advance(2)
 check(ns.T.state == "scroll" and ns.T.scrollDir == "down", "Bite 5 is row 12 of 7 on screen: scroll down (" .. tostring(ns.T.state) .. ")")
 check(ns.T.peeking and tf:GetAlpha() == 1, "peek: the Blizzard list is shown")
 local pt2 = { ns.UI.frame:GetPoint() }
@@ -371,16 +371,45 @@ press(); press()
 check(M.trained == "Bite Rank 5", "trained Bite 5")
 -- scrolled too far: target above the rows on screen
 M.scroll = 0; M.rebuildRows()
-ns.UI.Select(bite, bite.rankBy[4]); M.advance(1.2)
+ns.UI.Select(bite, bite.rankBy[4]); M.advance(2)
 check(ns.T.state == "scroll" and ns.T.scrollDir == "down", "Bite 4 below: scroll down")
 M.scroll = 5; M.rebuildRows(); M.advance(0.5)
 check(ns.T.state == "select", "Bite 4 found")
-ns.UI.Select(ns.byKey["Arcane Resistance"], ns.byKey["Arcane Resistance"].rankBy[1]); M.advance(1.2)
+ns.UI.Select(ns.byKey["Arcane Resistance"], ns.byKey["Arcane Resistance"].rankBy[1]); M.advance(2)
 check(ns.T.state == "scroll" and ns.T.scrollDir == "up", "Arcane Resistance 1 above: scroll up")
 -- hide the Blizzard window again
 ns.UI.frame.blizz._scripts.OnClick(ns.UI.frame.blizz)
 check(not ns.T.peeking and tf:GetAlpha() == 0, "Hide Blizzard window ends the peek")
 ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
 check(not ns.T.peeking and tf:GetAlpha() == 1, "closing Beast Training ends everything")
+check(#M.errors == 0, "no errors")
+-- 1.3.2: direct select. If the game answers SelectTrainerService with TRAINER_DESCRIPTION_UPDATE, the off-screen rank
+-- is selected by Blizzard's own handler: no scrolling, straight to Train.
+ns.db.opts.replace = true
+tf:Show(); M.scroll = 0; M.filters = { used = false, available = true, unavailable = true }; M.rebuildRows()
+M.services[12].status = "available"; M.trained = nil
+M.fire("TRAINER_SHOW"); M.advance(2.5)
+M.descEvent = true
+ns.UI.Select(bite, bite.rankBy[5]); M.advance(2)
+check(not ns.T.peeking and tf:GetAlpha() == 0, "direct select: no peek, Blizzard window stays hidden")
+check(ns.T.state == "train" and btn:GetText() == "Train Bite 5", "direct select: straight to Train (" .. tostring(btn:GetText()) .. ")")
+check(ns.T.directResult == "worked", "direct select recorded as working")
+press()
+check(M.trained == "Bite Rank 5", "trained Bite 5 without scrolling")
+-- tainted selection: never press Train, fall back to the scroll view
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+M.services[12].status = "available"; M.trained = nil; tf.selectedService = nil
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(2.5)
+M.tainted = true
+ns.UI.Select(bite, bite.rankBy[5]); M.advance(2.5)
+check(ns.T.state == "scroll" and ns.T.peeking, "tainted window selection: scroll view instead (" .. tostring(ns.T.state) .. ")")
+check(ns.T.directResult and ns.T.directResult:find("tainted"), "result: " .. tostring(ns.T.directResult))
+M.tainted = false; M.descEvent = false
+-- no event at all: scroll view
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+tf.selectedService = nil
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(2.5)
+ns.UI.Select(bite, bite.rankBy[5]); M.advance(2.5)
+check(ns.T.state == "scroll" and ns.T.directResult == "no event", "no event: scroll view (" .. tostring(ns.T.directResult) .. ")")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

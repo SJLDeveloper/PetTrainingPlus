@@ -193,6 +193,18 @@ function SetTrainerServiceTypeFilter(k, v)
   M.rebuildRows()
 end
 function GetTrainerSelectionIndex() return M.selection end
+-- SelectTrainerService from an addon; if M.descEvent, the game answers with TRAINER_DESCRIPTION_UPDATE and Blizzard's
+-- handler copies the selection into the window (as Forever's ClassTrainerFrame_OnEvent does).
+function SelectTrainerService(i)
+  M.selection = i
+  if M.descEvent then
+    C_Timer.After(0.2, function()
+      if ClassTrainerFrame then ClassTrainerFrame.selectedService = M.selection end
+      M.fire("TRAINER_DESCRIPTION_UPDATE")
+    end)
+  end
+end
+function issecurevariable() return not M.tainted, nil end
 C_TooltipInfo = { GetTrainerService = function(i) local s = visible(i); return s and { id = s.id } end }
 function BuyTrainerService() error("ADDON_ACTION_FORBIDDEN BuyTrainerService") end
 
@@ -202,8 +214,10 @@ function M.makeTrainer()
   local label = CreateFrame("Frame", "ClassTrainerFrameTrainingPointsLabel", f)
   f.ScrollBox = CreateFrame("Frame", nil, f)
   local train = CreateFrame("Button", "ClassTrainerTrainButton", f)
+  -- like ClassTrainerTrainButton_OnClick: buys the window's selectedService
   train:SetScript("OnClick", function()
-    local s = visible(M.selection)
+    local sel = f.selectedService
+    local s = sel and visible(sel)
     M.trained = s and (s.name .. " " .. s.rankText)
   end)
   local close = CreateFrame("Button", "ClassTrainerFrameCloseButton", f)
@@ -213,7 +227,8 @@ function M.makeTrainer()
   for i = 1, 7 do -- Forever's list: 47-px rows in a 330-px box
     local b = CreateFrame("Button", nil, f.ScrollBox)
     b.nameFS = b:CreateFontString(); b.rankFS = b:CreateFontString()
-    b:SetScript("OnClick", function(self) M.selection = self:GetID() end)
+    -- like ClassTrainer_SetSelection(self.displayIndex): the window's selection and SelectTrainerService
+    b:SetScript("OnClick", function(self) f.selectedService = self.displayIndex; M.selection = self:GetID() end)
     M.rows[i] = b
   end
   return f
