@@ -756,7 +756,7 @@ function UI.RefreshPet()
     f.mode:SetText("")
   end
   f.blizz:SetShown(T.beast)
-  f.blizz.label:SetText(ns.db.opts.replace and "Show Blizzard window" or "Hide Blizzard window")
+  f.blizz.label:SetText(T.ReplaceMode() and "Show Blizzard window" or "Hide Blizzard window")
 end
 
 function UI.OnTrainState()
@@ -784,8 +784,12 @@ function UI.OnTrainState()
       local r = T.target and T.target.r
       local c = r and ns.UpgradeCost(r)
       txt = "|cff9cff7aSelected.|r Press again to train" .. (c and (" for " .. c .. " TP") or "") .. "."
-    elseif s == "missing" then
-      txt = "The rank is not on screen in Beast Training: use Show Blizzard window and scroll to it."
+    elseif s == "finding" then
+      txt = "Looking for the rank in Beast Training…"
+    elseif s == "scroll" then
+      local nm = T.target and (ns.AbilityName(T.target.r.a) .. " " .. T.target.r.r) or "the rank"
+      txt = ("|cff9cff7a%s is %s in Blizzard's list.|r Scroll that list with the mouse wheel until it lights up, then press Select."):format(
+        nm, T.scrollDir == "up" and "further up" or "further down")
     elseif s == "blocked" then
       txt = "Beast Training won't train this rank now."
     end
@@ -1112,8 +1116,13 @@ function UI.Init()
   f.blizz:SetPoint("RIGHT", -32, 0)
   f.blizz:SetScript("OnClick", function()
     if ns.InCombat() then return end
-    ns.db.opts.replace = not ns.db.opts.replace
-    T.ApplyMode()
+    if T.peeking then
+      T.Peek(false)
+      if not ns.db.opts.replace then ns.db.opts.replace = true; T.ApplyMode() end
+    else
+      ns.db.opts.replace = not ns.db.opts.replace
+      T.ApplyMode()
+    end
     UI.Refresh()
   end)
   tooltipFor(f.blizz, function()
@@ -1242,7 +1251,8 @@ function UI.AttachToTrainer(trainer, replace)
   if not UI.attached then UI.wasShown = f:IsShown() end
   UI.attached = true
   f:ClearAllPoints()
-  local p = ns.db.trainerPos
+  -- while peeking, always beside the Blizzard list so it can be scrolled
+  local p = not T.peeking and ns.db.trainerPos
   if p and p.point then
     f:SetPoint(p.point, UIParent, p.rel or p.point, p.x or 0, p.y or 0)
   elseif replace then

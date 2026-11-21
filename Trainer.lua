@@ -8,6 +8,13 @@
 --   * A SecureActionButton of type "click" whose clickbutton is a trainer row selects that row untainted; a second
 --     press with clickbutton = ClassTrainerTrainButton trains it.
 -- So the Train button of Pet Training+ is one secure button pressed twice: Select, then Train.
+--
+-- Forever's own trainer code (wow-ui-source, branch "forever", Blizzard_TrainerUI/Mainline): Beast Training is a flat
+-- ScrollBox list (no categories for pet trainers) with 47-px rows in a 330-px box, so only about 7 rows exist at a
+-- time. A row button carries its service index (GetID) and display index (.displayIndex). Its scroll bar arrows react to
+-- OnMouseDown only, so a secure click can't scroll it, and scrolling it from addon code taints Train. When the chosen
+-- rank is off screen, Pet Training+ shows the Blizzard list beside its window ("peek") and asks you to scroll it with
+-- the mouse wheel; the row is picked up the moment it appears.
 local _, ns = ...
 local T = {}
 ns.T = T
@@ -168,8 +175,9 @@ function T.Ghost(on)
     local b = getBlocker()
     b:ClearAllPoints()
     b:SetAllPoints(f)
-    b:SetFrameStrata(f:GetFrameStrata())
-    b:SetFrameLevel(math.min(f:GetFrameLevel() + 200, 9000))
+    -- Forever's list and scroll bar are HIGH strata inside the MEDIUM window: cover them too
+    b:SetFrameStrata("HIGH")
+    b:SetFrameLevel(9000)
     b:Show()
   else
     if T.ghosted then f:SetAlpha(T.savedAlpha or 1) end
@@ -178,10 +186,22 @@ function T.Ghost(on)
   end
 end
 
+function T.ReplaceMode() return ns.db.opts.replace and not T.peeking end
+
 function T.ApplyMode()
   if not T.beast then return end
-  T.Ghost(ns.db.opts.replace)
-  if ns.UI and ns.UI.AttachToTrainer then ns.UI.AttachToTrainer(trainerFrame(), ns.db.opts.replace) end
+  T.Ghost(T.ReplaceMode())
+  if ns.UI and ns.UI.AttachToTrainer then ns.UI.AttachToTrainer(trainerFrame(), T.ReplaceMode()) end
+end
+
+-- Peek: the Blizzard list is shown beside our window so you can scroll it (stays on until Beast Training closes or
+-- you hide it again).
+function T.Peek(on)
+  on = on and true or false
+  if T.peeking == on or ns.InCombat() then return end
+  T.peeking = on
+  T.ApplyMode()
+  if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
 end
 
 -- ------------------------------------------------------------------ session
@@ -217,6 +237,8 @@ function T.EndBeast()
   if not T.beast then return end
   T.beast = false
   T.target, T.mode = nil, "select"
+  T.peeking = false
+  T.ShowGlow(nil)
   T.Ghost(false)
   restoreFilters()
   driver:Hide()
@@ -274,30 +296,109 @@ local function collectTexts(frame, out, depth)
 end
 
 -- Trainer rows are unnamed, recycled ScrollBox buttons: the one on screen that shows this name and rank.
-function T.FindRow(name, rankText)
+-- The service index of a rank in the list as it is now (the filters change it).
+function T.CurrentIndex(name, rk)
+  local n = try(GetNumTrainerServices) or 0
+  for i = 1, n do
+    local nm, _, _, _, rankText = try(GetTrainerServiceInfo, i)
+    if nm == name and ns.RankNumber(rankText) == rk then return i end
+  end
+  return nil
+end
+
+local function trim(t)
+  return (t:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- The visible row buttons of the Blizzard list: { { frame, id } }, top to bottom as found.
+local function visibleRows()
   local f = trainerFrame()
-  if not (f and name) then return nil end
-  local rk = ns.RankNumber(rankText)
-  local found
+  local out = {}
+  if not f then return out end
   local function scan(fr, depth)
-    if found or depth > 12 then return end
+    if depth > 12 then return end
     if fr:IsVisible() and fr:IsObjectType("Button") and fr:GetScript("OnClick") and fr ~= _G.ClassTrainerTrainButton then
-      local hasName, hasRank = false, false
-      for _, t in ipairs(collectTexts(fr, {}, 0)) do
-        if t == name then
-          hasName = true
-        elseif rankText and (t == rankText or t:find(rankText, 1, true)) then
-          hasRank = true
-        elseif rk and t:find(name, 1, true) and ns.RankNumber(t:sub(#name + 1)) == rk then
-          hasName, hasRank = true, true -- "Bite (Rank 3)" in one string
-        end
-      end
-      if hasName and (hasRank or not rankText) then found = fr; return end
+      local id = clean(fr:GetID())
+      if fr.displayIndex ~= nil or (type(id) == "number" and id > 0) then out[#out + 1] = { fr, id } end
     end
     for _, c in ipairs({ fr:GetChildren() }) do scan(c, depth + 1) end
   end
   scan(f.ScrollBox or f, 0)
-  return found
+  return out
+end
+
+-- The row showing this rank, if it is on screen; else nil and which way to scroll ("down" / "up").
+function T.FindRow(name, rankText)
+  if not name then return nil end
+  local rk = ns.RankNumber(rankText)
+  local idx = T.CurrentIndex(name, rk)
+  local rows = visibleRows()
+  local lo, hi
+  for _, row in ipairs(rows) do
+    local fr, id = row[1], row[2]
+    if type(id) == "number" then
+      lo = (not lo or id < lo) and id or lo
+      hi = (not hi or id > hi) and id or hi
+    end
+    -- exact: Forever's rows carry their service index
+    if idx and id == idx then
+      local ok = false
+      for _, t in ipairs(collectTexts(fr, {}, 0)) do
+        if trim(t) == name or t:find(name, 1, true) then ok = true; break end
+      end
+      if ok then return fr end
+    end
+  end
+  -- fallback: the name and the rank number in the row's texts
+  for _, row in ipairs(rows) do
+    local hasName, hasRank = false, not rk
+    for _, t in ipairs(collectTexts(row[1], {}, 0)) do
+      local tt = trim(t)
+      if tt == name then hasName = true
+      elseif rk and ns.RankNumber(tt) == rk and tt:find("%(") then hasRank = true end
+    end
+    if hasName and hasRank then return row[1] end
+  end
+  local dir = "down"
+  if idx and lo and idx < lo then dir = "up" end
+  return nil, dir, idx
+end
+
+-- A pulsing frame over the Blizzard list: around the row to select, or around the list with "scroll" text.
+local glow
+function T.ShowGlow(anchor, text)
+  if not anchor then
+    if glow then glow:Hide() end
+    return
+  end
+  if not glow then
+    glow = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    glow:EnableMouse(false)
+    glow:SetFrameStrata("DIALOG")
+    if glow.SetBackdrop then
+      glow:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
+      glow:SetBackdropBorderColor(.35, 1, .45, 1)
+    end
+    glow.fill = glow:CreateTexture(nil, "BACKGROUND")
+    glow.fill:SetAllPoints()
+    glow.fill:SetColorTexture(.35, 1, .45, .10)
+    glow.text = glow:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    glow.text:SetPoint("BOTTOM", glow, "TOP", 0, 6)
+    local ag = glow.CreateAnimationGroup and glow:CreateAnimationGroup()
+    local a = ag and ag:CreateAnimation("Alpha")
+    if a then
+      ag:SetLooping("BOUNCE")
+      a:SetFromAlpha(1)
+      a:SetToAlpha(.4)
+      a:SetDuration(.6)
+      ag:Play()
+    end
+  end
+  glow:ClearAllPoints()
+  glow:SetPoint("TOPLEFT", anchor, "TOPLEFT", -2, 2)
+  glow:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 2, -2)
+  glow.text:SetText(text or "")
+  glow:Show()
 end
 
 local function trainButton()
@@ -414,7 +515,7 @@ function T.SetTarget(r)
     return
   end
   if not (T.target and T.target.r == r) then
-    T.target = { r = r, name = live.name, rankText = live.rankText }
+    T.target = { r = r, name = live.name, rankText = live.rankText, at = GetTime() }
     T.mode = "select"
     T.warning = nil
   end
@@ -444,6 +545,7 @@ function T.UpdateTrainButton(fromClick)
   if not t then
     label, enabled = "Choose a rank to train", false
     T.state = "none"
+    T.ShowGlow(nil)
   else
     local nm = ns.AbilityName(t.r.a) .. " " .. t.r.r
     if T.mode == "train" and not selectionMatches() then T.mode = "select" end
@@ -458,16 +560,33 @@ function T.UpdateTrainButton(fromClick)
         T.state = "blocked"
       end
     else
-      row = T.FindRow(t.name, t.rankText)
+      local dir
+      row, dir = T.FindRow(t.name, t.rankText)
       if row then
         actionBtn:SetAttribute("clickbutton", row)
         label, enabled = "Select " .. nm, true
         T.state = "select"
+        if T.peeking then T.ShowGlow(row) else T.ShowGlow(nil) end
       else
         actionBtn:SetAttribute("clickbutton", nil)
-        label, enabled = "Finding " .. nm .. "…", false
-        T.state = "missing"
+        T.scrollDir = dir
+        if GetTime() - (t.at or 0) < 0.7 and not T.peeking then
+          -- the list redraws a moment after the filter change
+          label, enabled = "Finding " .. nm .. "…", false
+          T.state = "finding"
+        else
+          -- off screen: show the Blizzard list beside ours so it can be scrolled with the mouse wheel
+          if not T.peeking then T.Peek(true) end
+          local f = trainerFrame()
+          local box = f and (f.ScrollBox or f)
+          T.ShowGlow(box, ("Scroll %s to %s"):format(dir == "up" and "up" or "down", nm))
+          label, enabled = "Scroll " .. (dir == "up" and "up" or "down") .. " to " .. nm, false
+          T.state = "scroll"
+        end
       end
+    end
+    if T.mode == "train" then
+      T.ShowGlow(nil)
     end
   end
   if T.mode ~= "train" and not row then actionBtn:SetAttribute("clickbutton", nil) end
@@ -501,6 +620,17 @@ function T.DebugReport()
     yes(trainerFrame() and trainerFrame().ScrollBox), yes(trainButton()), yes(closeButton())))
   ns.Print(("Filters API %s · tooltip IDs %s · craft API %s"):format(yes(SetTrainerServiceTypeFilter),
     yes(C_TooltipInfo and C_TooltipInfo.GetTrainerService), yes(GetCraftInfo)))
+  local rows = visibleRows()
+  local list = {}
+  for _, row in ipairs(rows) do
+    local texts = collectTexts(row[1], {}, 0)
+    list[#list + 1] = tostring(row[2]) .. "=" .. table.concat(texts, "/")
+  end
+  ns.Print(("%d rows on screen: %s"):format(#rows, table.concat(list, " · ")))
+  if T.target then
+    ns.Print(("Target %s %s · index now %s · state %s"):format(tostring(T.target.name), tostring(T.target.rankText),
+      tostring(T.CurrentIndex(T.target.name, T.target.r.r)), tostring(T.state)))
+  end
   local p = ns.pet
   if p then
     local n = 0

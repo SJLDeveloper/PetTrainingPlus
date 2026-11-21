@@ -335,4 +335,52 @@ ns.Bestiary.ShowAbility(ns.byKey.Bite)
 fb:Hide()
 check(fb:GetFrameStrata() == "HIGH", "closing the Bestiary restores its layer")
 check(#M.errors == 0, "no errors")
+-- 1.3.1: the chosen rank is below the 7 rows Forever's list shows: peek, scroll, select, train
+ns.Bestiary.SendBack()
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+ns.db.trainerPos = nil
+ns.db.opts.replace = true
+M.units.pet = { name = "Fang", level = 60, guid = "Pet-0-1-2-3-165189-0400AB", fam = 5, famName = "Boar" }
+M.petSpells = { 17256, 26177, 14916 }
+M.tp = { 300, 41 }
+M.fire("UNIT_PET", "player"); M.advance(2)
+M.services = {}
+local function add(name, r, id, lvl, tp) table.insert(M.services, { name = name, rankText = "Rank " .. r, status = "available", lvl = lvl, tp = tp, id = id }) end
+add("Arcane Resistance", 1, 24493, 20, 5); add("Fire Resistance", 1, 23992, 20, 5); add("Frost Resistance", 1, 24446, 20, 5)
+add("Nature Resistance", 1, 24492, 20, 5); add("Shadow Resistance", 1, 24488, 20, 5); add("Great Stamina", 1, 4187, 1, 5)
+add("Great Stamina", 2, 4188, 12, 10); add("Natural Armor", 1, 24545, 1, 1); add("Natural Armor", 2, 24549, 8, 5)
+add("Growl", 3, 14917, 20, 0); add("Bite", 4, 17257, 24, 10); add("Bite", 5, 17258, 32, 13)
+M.filters = { used = false, available = true, unavailable = true }
+tf:Show(); M.rebuildRows()
+M.fire("TRAINER_SHOW"); M.advance(2.5)
+check(tf:GetAlpha() == 0 and not ns.T.peeking, "replace mode, not peeking")
+ns.UI.Select(bite, bite.rankBy[5]); M.advance(0.3)
+check(ns.T.state == "finding", "first moment: finding (" .. tostring(ns.T.state) .. ")")
+M.advance(1)
+check(ns.T.state == "scroll" and ns.T.scrollDir == "down", "Bite 5 is row 12 of 7 on screen: scroll down (" .. tostring(ns.T.state) .. ")")
+check(ns.T.peeking and tf:GetAlpha() == 1, "peek: the Blizzard list is shown")
+local pt2 = { ns.UI.frame:GetPoint() }
+check(pt2[2] == ClassTrainerFrame and pt2[3] == "TOPRIGHT", "our window docks beside it")
+check(btn:GetText() == "Scroll down to Bite 5" and not btn:IsEnabled(), "button: " .. tostring(btn:GetText()))
+check(ns.UI.frame.footerText:GetText():find("mouse wheel"), "footer explains the scroll")
+-- the player scrolls the Blizzard list with the mouse wheel
+M.scroll = 5; M.rebuildRows(); M.advance(0.5)
+M.trained = nil
+check(ns.T.state == "select" and btn:GetAttribute("clickbutton") and btn:GetAttribute("clickbutton"):GetID() == 12, "row found after scrolling: " .. tostring(btn:GetText()))
+press(); press()
+check(M.trained == "Bite Rank 5", "trained Bite 5")
+-- scrolled too far: target above the rows on screen
+M.scroll = 0; M.rebuildRows()
+ns.UI.Select(bite, bite.rankBy[4]); M.advance(1.2)
+check(ns.T.state == "scroll" and ns.T.scrollDir == "down", "Bite 4 below: scroll down")
+M.scroll = 5; M.rebuildRows(); M.advance(0.5)
+check(ns.T.state == "select", "Bite 4 found")
+ns.UI.Select(ns.byKey["Arcane Resistance"], ns.byKey["Arcane Resistance"].rankBy[1]); M.advance(1.2)
+check(ns.T.state == "scroll" and ns.T.scrollDir == "up", "Arcane Resistance 1 above: scroll up")
+-- hide the Blizzard window again
+ns.UI.frame.blizz._scripts.OnClick(ns.UI.frame.blizz)
+check(not ns.T.peeking and tf:GetAlpha() == 0, "Hide Blizzard window ends the peek")
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+check(not ns.T.peeking and tf:GetAlpha() == 1, "closing Beast Training ends everything")
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

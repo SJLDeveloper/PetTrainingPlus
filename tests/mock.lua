@@ -17,7 +17,25 @@ strsplit = function(sep, s)
 end
 issecretvalue = function() return false end
 C_Timer = { After = function(sec, fn) table.insert(M.timers, { due = M.clock + sec, fn = fn }) end }
+local function tickOnUpdate(dt)
+  for _, f in ipairs(M.allFrames or {}) do
+    local fn = rawget(f, "_scripts") and f._scripts.OnUpdate
+    if fn and rawget(f, "_shown") then
+      local ok, err = pcall(fn, f, dt)
+      if not ok then table.insert(M.errors, err); print("ONUPDATE ERROR: " .. tostring(err)) end
+    end
+  end
+end
 function M.advance(sec)
+  -- OnUpdate runs every 0.05 s of game time, timers in between
+  local stop = M.clock + sec
+  while M.clock + 0.05 < stop do
+    M.advanceTimers(0.05)
+    tickOnUpdate(0.05)
+  end
+  M.advanceTimers(stop - M.clock)
+end
+function M.advanceTimers(sec)
   local target = M.clock + sec
   while true do
     table.sort(M.timers, function(a, b) return a.due < b.due end)
@@ -93,6 +111,8 @@ function Frame:Disable() self._enabled = false end
 function Frame:GetHeight() return rawget(self, "_h") or 900 end
 function Frame:SetScale(v) self._scale = v end
 function Frame:GetScale() return rawget(self, "_scale") or 1 end
+function Frame:GetID() return rawget(self, "_id") or 0 end
+function Frame:SetID(v) self._id = v end
 function Frame:Click()
   if self._scripts.OnClick then self._scripts.OnClick(self, "LeftButton") end
 end
@@ -189,19 +209,24 @@ function M.makeTrainer()
   local close = CreateFrame("Button", "ClassTrainerFrameCloseButton", f)
   close:SetScript("OnClick", function() f:Hide(); M.fire("TRAINER_CLOSED") end)
   M.rows = {}
-  for i = 1, 8 do
+  M.scroll = 0
+  for i = 1, 7 do -- Forever's list: 47-px rows in a 330-px box
     local b = CreateFrame("Button", nil, f.ScrollBox)
     b.nameFS = b:CreateFontString(); b.rankFS = b:CreateFontString()
-    b:SetScript("OnClick", function(self) M.selection = self.index end)
+    b:SetScript("OnClick", function(self) M.selection = self:GetID() end)
     M.rows[i] = b
   end
   return f
 end
 function M.rebuildRows()
   if not M.rows then return end
+  local n = GetNumTrainerServices()
+  if M.scroll > math.max(n - #M.rows, 0) then M.scroll = math.max(n - #M.rows, 0) end
   for i, b in ipairs(M.rows) do
-    local s = visible(i)
-    if s then b._shown = true; b.index = i; b.nameFS._text = s.name; b.rankFS._text = s.rankText
+    local idx = i + M.scroll
+    local s = visible(idx)
+    -- like ClassTrainerFrame_InitServiceButton: SetID(skillIndex), .displayIndex, name + "(Rank n)"
+    if s then b._shown = true; b._id = idx; b.displayIndex = idx; b.nameFS._text = s.name; b.rankFS._text = "(" .. s.rankText .. ")"
     else b._shown = false end
   end
 end

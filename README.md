@@ -40,8 +40,9 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
   family you use, and Pet Training+ fills in everything you know. After that, new ranks are picked up from the
   learn message as you play.
 - Training has to go through Blizzard's own Train button, because addons are not allowed to train pets directly.
-  That is why Train takes two presses. If a rank can't be found on screen, click **Show Blizzard window**
-  and scroll to it.
+  That is why Train takes two presses. Blizzard's Beast Training list only shows about 7 rows at a time and addons
+  can't scroll it, so when the rank you picked is further down, Pet Training+ shows Blizzard's list beside its window
+  and highlights it: scroll it with the mouse wheel until the rank lights up, then press Select and Train.
 - If you close Pet Training+ while Beast Training is open, the Blizzard window comes back.
 
 ## Credits
