@@ -510,7 +510,7 @@ end
 function T.SetTarget(r)
   if not T.beast or ns.InCombat() then return end
   local live = r and T.LiveRow(r)
-  if not (live and live.status == "available") then
+  if not (live and live.status == "available" and ns.RankPetState(r) == "trainable") then
     T.target, T.mode = nil, "select"
     T.UpdateTrainButton()
     return
@@ -609,7 +609,10 @@ function T.UpdateTrainButton(fromClick)
       else
         actionBtn:SetAttribute("clickbutton", nil)
         T.scrollDir = dir
-        if not t.directAt and GetTime() - (t.at or 0) >= 0.4 then T.TryDirect(t) end
+        -- (seen twice without the event and never working: this client doesn't do it, skip the wait)
+        local skipDirect = not ns.db.directWorked and (ns.db.directNoEvent or 0) >= 2
+        if skipDirect and not t.directAt then T.directResult = T.directResult or "skipped: no event on this client" end
+        if not skipDirect and not t.directAt and GetTime() - (t.at or 0) >= 0.4 then T.TryDirect(t) end
         local waitingDirect = t.directAt and GetTime() - t.directAt < DIRECT_WAIT
         local direct, why = false, nil
         if t.directAt then direct, why = T.WindowSelects(t.directIdx) end
@@ -626,6 +629,7 @@ function T.UpdateTrainButton(fromClick)
         elseif t.directAt and not waitingDirect and not t.directReported then
           t.directReported = true
           T.directResult = (T.descEvents > (t.directEvents or 0)) and ("event came, " .. tostring(why)) or "no event"
+          if T.directResult == "no event" then ns.db.directNoEvent = (ns.db.directNoEvent or 0) + 1 end
           if not ns.db.directWorked and not T.directToldNo then
             T.directToldNo = true
             ns.Print("Ranks off screen can't be selected directly here (" .. T.directResult .. "): use the scroll view. /ptp debug has details.")

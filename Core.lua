@@ -372,7 +372,11 @@ function ns.RankPetState(r)
   if can == false then return "family" end
   local live = ns.T and ns.T.LiveRow(r)
   if live then
-    if live.status == "available" then return "trainable", live.tp end
+    if live.status == "available" then
+      -- Blizzard calls a rank "available" once the level is met, even when the pet can't afford it
+      if live.tp and p.tpFree and live.tp > p.tpFree then return "tp", live.tp end
+      return "trainable", live.tp
+    end
     local lvl = ns.RankLevel(r)
     if lvl and p.level and p.level < lvl then return "level", lvl end
     return "tp", live.tp

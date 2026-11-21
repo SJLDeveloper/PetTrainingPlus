@@ -390,6 +390,7 @@ tf:Show(); M.scroll = 0; M.filters = { used = false, available = true, unavailab
 M.services[12].status = "available"; M.trained = nil
 M.fire("TRAINER_SHOW"); M.advance(2.5)
 M.descEvent = true
+ns.db.directNoEvent = 0
 ns.UI.Select(bite, bite.rankBy[5]); M.advance(2)
 check(not ns.T.peeking and tf:GetAlpha() == 0, "direct select: no peek, Blizzard window stays hidden")
 check(ns.T.state == "train" and btn:GetText() == "Train Bite 5", "direct select: straight to Train (" .. tostring(btn:GetText()) .. ")")
@@ -411,5 +412,33 @@ tf.selectedService = nil
 tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(2.5)
 ns.UI.Select(bite, bite.rankBy[5]); M.advance(2.5)
 check(ns.T.state == "scroll" and ns.T.directResult == "no event", "no event: scroll view (" .. tostring(ns.T.directResult) .. ")")
+-- after two "no event" results on a client where it never worked, the attempt (and its wait) is skipped
+ns.db.directWorked = nil
+ns.db.directNoEvent = 2
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+tf.selectedService = nil; ns.T.directResult = nil
+tf:Show(); M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(2.5)
+ns.UI.Select(bite, bite.rankBy[5]); M.advance(1)
+check(ns.T.state == "scroll" and ns.T.directResult:find("skipped"), "known no-event client: scroll view right away (" .. tostring(ns.T.directResult) .. ")")
+check(#M.errors == 0, "no errors")
+-- 1.3.3: "available" but not affordable (seen in game: Cower 2 at 10 TP with 7 free) is not trainable
+ClassTrainerFrameCloseButton:Click(); M.advance(0.5)
+M.units.pet = { name = "Ursa", level = 22, guid = "Pet-0-1-2-3-165189-0400AD", fam = 4, famName = "Bear" }
+M.petSpells = { 16829, 14916 }
+M.tp = { 21, 14 }
+M.fire("UNIT_PET", "player"); M.advance(2)
+M.services = {
+  { name = "Great Stamina", rankText = "Rank 1", status = "available", lvl = 1, tp = 5, id = 4187 },
+  { name = "Natural Armor", rankText = "Rank 1", status = "available", lvl = 1, tp = 1, id = 24545 },
+  { name = "Cower", rankText = "Rank 2", status = "available", lvl = 15, tp = 10, id = 1753 },
+}
+M.filters = { used = false, available = true, unavailable = true }
+tf:Show(); M.scroll = 0; M.rebuildRows(); M.fire("TRAINER_SHOW"); M.advance(2.5)
+check(ns.pet.tpFree == 7, "7 TP free")
+check(ns.RankPetState(ns.byKey.Cower.rankBy[2]) == "tp", "Cower 2 (10 TP) is not trainable with 7 free: " .. tostring(ns.RankPetState(ns.byKey.Cower.rankBy[2])))
+check(ns.RankPetState(ns.byKey["Natural Armor"].rankBy[1]) == "trainable", "Natural Armor 1 (1 TP) trainable")
+ns.UI.Select(ns.byKey.Cower, ns.byKey.Cower.rankBy[2]); M.advance(0.5)
+check(ns.T.target == nil and ns.T.state == "none", "unaffordable rank is never targeted")
+check(ns.UI.frame.footerText:GetText():find("needs 10 training points"), "footer: " .. tostring(ns.UI.frame.footerText:GetText()))
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")
