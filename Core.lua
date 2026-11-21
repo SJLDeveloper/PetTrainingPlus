@@ -719,8 +719,8 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
     if ns.T and ns.T.DebugReport then ns.T.DebugReport() end
   elseif msg == "dock" or msg == "replace" then
     ns.db.opts.replace = (msg == "replace")
-    ns.Print(ns.db.opts.replace and "Beast Training: its list is shown inside Pet Training+ (right-hand column)."
-      or "Beast Training: Blizzard's whole window is shown next to Pet Training+.")
+    ns.Print(ns.db.opts.replace and "Beast Training: Blizzard's window and Pet Training+ framed together as one."
+      or "Beast Training: Blizzard's window and Pet Training+ as two windows side by side.")
     if ns.T and ns.T.ApplyMode then ns.T.ApplyMode() end
   elseif msg:match("^scale") then
     local v = tonumber(msg:match("^scale%s+([%d%.]+)"))

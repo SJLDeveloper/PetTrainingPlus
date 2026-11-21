@@ -124,6 +124,7 @@ function Frame:GetWidth() return rawget(self, "_w") or 100 end
 function Frame:SetWidth(v) self._w = v end
 function Frame:SetSize(w, h) self._w, self._h = w, h end
 function Frame:ClearAllPoints() self._point = nil end
+function Frame:IsMovable() return rawget(self, "_movable") or false end
 function Frame:GetID() return rawget(self, "_id") or 0 end
 function Frame:SetID(v) self._id = v end
 function Frame:Click()
@@ -225,6 +226,7 @@ function BuyTrainerService() error("ADDON_ACTION_FORBIDDEN BuyTrainerService") e
 function M.makeTrainer()
   local f = CreateFrame("Frame", "ClassTrainerFrame", UIParent)
   f._shown = false
+  f._movable = true
   local label = CreateFrame("Frame", "ClassTrainerFrameTrainingPointsLabel", f)
   f.ScrollBox = CreateFrame("Frame", nil, f)
   f.ScrollBox._w, f.ScrollBox._h = 302, 330 -- Forever's XML

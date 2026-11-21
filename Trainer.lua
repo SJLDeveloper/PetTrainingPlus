@@ -16,11 +16,9 @@
 -- rank is off screen, Pet Training+ outlines the list and asks you to scroll it with the mouse wheel; the row is
 -- picked up the moment it appears.
 --
--- v1.4: the wrapper. Blizzard's list (ScrollBox + ScrollBar, HIGH strata, children of the movable ClassTrainerFrame)
--- stays visible while every other part of the window is made transparent (v1.4.3; a transparent window with
--- SetIgnoreParentAlpha on its list drew nothing in Forever), and the window is moved so the list sits in the
--- right-hand column of Pet Training+. Moving it, its alpha and drawing order write nothing that
--- Blizzard's Lua reads, so Train stays untainted. Its own Train, close and filter buttons are covered.
+-- v1.5: the frame. Blizzard's Beast Training window is left exactly as Blizzard draws it, in its own place; Pet
+-- Training+ attaches to its right edge and one border (a LOW-strata backing frame) is drawn around both. (v1.4 tried to
+-- draw only Blizzard's list inside our window; Forever drew none of it, whatever the frames reported.)
 local _, ns = ...
 local T = {}
 ns.T = T
@@ -160,175 +158,10 @@ function T.Scan(mode)
 end
 
 -- ------------------------------------------------------------------ ghosting the Blizzard window
--- Covers Blizzard's own (invisible) Train, close and filter buttons, so nothing hidden can be clicked.
-local covers = {}
-local function coverFor(target)
-  local c = covers[target]
-  if not c then
-    c = CreateFrame("Frame", nil, UIParent)
-    c:EnableMouse(true)
-    if c.EnableMouseWheel then c:EnableMouseWheel(true) end
-    c:SetScript("OnMouseWheel", function() end)
-    covers[target] = c
-  end
-  c:ClearAllPoints()
-  c:SetAllPoints(target)
-  c:SetFrameStrata("HIGH")
-  c:SetFrameLevel(9000)
-  return c
-end
-
-local function blizzardButtons()
-  local f = trainerFrame()
-  if not f then return {} end
-  local list = {}
-  for _, b in ipairs({ _G.ClassTrainerTrainButton or f.TrainButton, _G.ClassTrainerFrameCloseButton or f.CloseButton,
-      f.FilterDropdown }) do
-    if type(b) == "table" then list[#list + 1] = b end
-  end
-  return list
-end
-
--- Wrap: only Blizzard's list shows, in our right-hand column.
+-- Framed: Pet Training+ sits beside Blizzard's untouched window, one border around both (T.wrapped while it shows).
 function T.Wrap(on)
-  local f = trainerFrame()
-  if not f then return end
-  local sb = type(f.ScrollBox) == "table" and f.ScrollBox or nil
-  local bar = type(f.ScrollBar) == "table" and f.ScrollBar or nil
-  if on then
-    if not T.wrapped then
-      local pts = {}
-      for i = 1, (f.GetNumPoints and f:GetNumPoints() or 0) do pts[i] = { f:GetPoint(i) } end
-      T.saved = { alpha = f:GetAlpha(), points = pts }
-    end
-    if not T.wrapped then
-      T.saved.strata = {}
-      local tgt = sb and type(sb.ScrollTarget) == "table" and sb.ScrollTarget or nil
-      for _, fr in ipairs({ sb, bar, tgt }) do if fr then T.saved.strata[fr] = fr:GetFrameStrata() end end
-      T.wrapAt = GetTime()
-      T.wrapChecked = false
-    end
-    T.wrapped = true
-    -- The window itself stays opaque (a fully transparent window drew none of its list on Forever, even with
-    -- SetIgnoreParentAlpha). Instead every other part of it is made transparent, one by one.
-    T.HideParts()
-    T.KeepListOnTop(true)
-    for _, b in ipairs(blizzardButtons()) do coverFor(b):Show() end
-    T.Align()
-  else
-    if T.wrapped and T.saved then
-      f:SetAlpha(T.saved.alpha or 1)
-      for part, a in pairs(T.saved.parts or {}) do part:SetAlpha(a) end
-      -- every frame we raised goes back to the layer it had (rows to their scroll target's)
-      local tgt = sb and type(sb.ScrollTarget) == "table" and sb.ScrollTarget or nil
-      for fr, st in pairs(T.saved.strata or {}) do
-        if fr:GetFrameStrata() ~= st then fr:SetFrameStrata(st) end
-      end
-      local rowStrata = tgt and T.saved.strata[tgt] or (sb and T.saved.strata[sb])
-      if rowStrata and T.VisibleRows then
-        for _, row in ipairs(T.VisibleRows()) do
-          if row[1]:GetFrameStrata() ~= rowStrata then row[1]:SetFrameStrata(rowStrata) end
-        end
-      end
-      if #T.saved.points > 0 then
-        f:ClearAllPoints()
-        for _, pt in ipairs(T.saved.points) do f:SetPoint(unpack(pt)) end
-      end
-    end
-    T.wrapped = false
-    T.saved = nil
-    for _, c in pairs(covers) do c:Hide() end
-  end
-end
-
--- Every part of Blizzard's window except its list and scroll bar: its own textures and font strings, and its child
--- frames (title, portrait, frame art, insets, buttons, training points...). Saved alphas come back on unwrap.
-function T.HideParts()
-  local f = trainerFrame()
-  if not (f and T.saved) then return end
-  local sb, bar = f.ScrollBox, f.ScrollBar
-  T.saved.parts = T.saved.parts or {}
-  local parts = {}
-  for _, r in ipairs({ f:GetRegions() }) do parts[#parts + 1] = r end
-  for _, c in ipairs({ f:GetChildren() }) do
-    if c ~= sb and c ~= bar then parts[#parts + 1] = c end
-  end
-  for _, part in ipairs(parts) do
-    if part.SetAlpha and part.GetAlpha then
-      if T.saved.parts[part] == nil then T.saved.parts[part] = clean(part:GetAlpha()) or 1 end
-      if part:GetAlpha() ~= 0 then part:SetAlpha(0) end
-    end
-  end
-  -- the window itself and its list: fully opaque
-  if f:GetAlpha() ~= 1 then f:SetAlpha(1) end
-  for _, fr in ipairs({ sb, bar }) do
-    if type(fr) == "table" and fr.GetAlpha and fr:GetAlpha() ~= 1 then fr:SetAlpha(1) end
-  end
-end
-
--- The list and its scroll bar must draw above our window (MEDIUM): HIGH, whatever their parent's layer does.
--- (also the list's scroll target and its rows: rows made while the list was lower may keep the lower layer)
-function T.KeepListOnTop(withRows)
-  local f = trainerFrame()
-  if not f then return end
-  local sb = f.ScrollBox
-  local list = { sb, f.ScrollBar, type(sb) == "table" and sb.ScrollTarget or nil }
-  if withRows and T.VisibleRows then
-    for _, row in ipairs(T.VisibleRows()) do list[#list + 1] = row[1] end
-  end
-  for _, fr in ipairs(list) do
-    if type(fr) == "table" and fr.GetFrameStrata and fr:GetFrameStrata() ~= "HIGH" then fr:SetFrameStrata("HIGH") end
-  end
-end
-
--- A frame's rectangle in screen pixels: left, top, right, bottom (nil if not laid out).
-local function screenRect(fr)
-  if type(fr) ~= "table" then return nil end
-  local e = clean(fr:GetEffectiveScale())
-  local l, t, r, b = clean(fr:GetLeft()), clean(fr:GetTop()), clean(fr:GetRight()), clean(fr:GetBottom())
-  if not (e and l and t) then return nil end
-  return l * e, t * e, r and r * e, b and b * e
-end
-T.ScreenRect = screenRect
-
--- Is Blizzard's list really showing in our slot? true / false / nil (can't tell: not laid out yet).
-function T.ListInSlot()
-  local f = trainerFrame()
-  local sb = f and type(f.ScrollBox) == "table" and f.ScrollBox or nil
-  local slot = ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()
-  if not (sb and slot) then return nil end
-  local sl, st = screenRect(slot)
-  local bl, bt = screenRect(sb)
-  if not (sl and bl) then return nil end
-  if not sb:IsVisible() then return false, "list not visible" end
-  local alpha = sb.GetEffectiveAlpha and clean(sb:GetEffectiveAlpha())
-  if alpha and alpha < 0.5 then return false, ("list transparent (%.2f)"):format(alpha) end
-  if math.abs(sl - bl) > 3 or math.abs(st - bt) > 3 then
-    return false, ("list at %d,%d, slot at %d,%d"):format(bl, bt, sl, st)
-  end
-  -- the rows themselves must be visible too (an opaque list with transparent rows shows nothing)
-  local rows = T.VisibleRows and T.VisibleRows() or {}
-  local row = rows[1] and rows[1][1]
-  if row and row.GetEffectiveAlpha then
-    local ra = clean(row:GetEffectiveAlpha())
-    if ra and ra < 0.5 then return false, ("rows transparent (%.2f)"):format(ra) end
-  end
-  return true
-end
-
--- Moves Blizzard's window so its list's top-left corner sits on our list slot's top-left corner (screen pixels).
-function T.Align()
-  local f = trainerFrame()
-  local sb = f and type(f.ScrollBox) == "table" and f.ScrollBox or nil
-  local slot = ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()
-  if not (T.wrapped and sb and slot and slot:IsVisible()) then return end
-  local se, te, be = slot:GetEffectiveScale(), f:GetEffectiveScale(), sb:GetEffectiveScale()
-  local sl, st, bl, bt, fl, ft = slot:GetLeft(), slot:GetTop(), sb:GetLeft(), sb:GetTop(), f:GetLeft(), f:GetTop()
-  if not (se and te and be and sl and st and bl and bt and fl and ft) then return end
-  local dx, dy = sl * se - bl * be, st * se - bt * be
-  if math.abs(dx) < 0.5 and math.abs(dy) < 0.5 then return end
-  f:ClearAllPoints()
-  f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", fl + dx / te, ft + dy / te)
+  T.wrapped = on and true or false
+  if ns.UI and ns.UI.SetFramed then ns.UI.SetFramed(T.wrapped) end
 end
 
 function T.WrapMode() return ns.db.opts.replace and true or false end
@@ -336,9 +169,8 @@ T.ReplaceMode = T.WrapMode
 
 function T.ApplyMode()
   if not T.beast then return end
-  local wrap = T.WrapMode() and ns.UI and ns.UI.frame and ns.UI.frame:IsShown()
   if ns.UI and ns.UI.AttachToTrainer then ns.UI.AttachToTrainer(trainerFrame(), T.WrapMode()) end
-  T.Wrap(wrap)
+  T.Wrap(T.WrapMode() and ns.UI and ns.UI.frame and ns.UI.frame:IsShown() and true or false)
 end
 
 -- ------------------------------------------------------------------ session
@@ -347,33 +179,10 @@ driver:Hide()
 local acc = 0
 driver:SetScript("OnUpdate", function(_, dt)
   local f = trainerFrame()
-  if T.wrapped and f then
-    T.KeepListOnTop()
-    T.Align() -- the window may have been moved (by us dragging, or Blizzard's panel layout)
-    if not T.wrapChecked and T.wrapAt and GetTime() - T.wrapAt > 1.0 then
-      local ok, why = T.ListInSlot()
-      if ok ~= nil then
-        T.wrapChecked = true
-        T.wrapProblem = (ok == false) and why or nil
-        if ok == false and not ns.InCombat() then
-          -- never leave an empty column: show Blizzard's whole window beside ours instead
-          ns.db.opts.replace = false
-          T.ApplyMode()
-          if ns.UI and ns.UI.Refresh then ns.UI.Refresh() end
-          ns.Print("Couldn't show Beast Training's list inside the window (" .. tostring(why) ..
-            "), so Blizzard's window is shown beside it. /ptp debug has details; /ptp replace tries again.")
-        end
-      end
-    end
-  end
   acc = acc + dt
   if acc >= 0.25 then
     acc = 0
     if T.beast and not (f and f:IsShown()) then T.EndBeast(); return end
-    if T.wrapped then
-      T.HideParts() -- Blizzard may show or fade its parts again
-      T.KeepListOnTop(true)
-    end
     T.FollowWindowSelection()
     T.UpdateTrainButton()
   end
@@ -876,25 +685,17 @@ function T.DebugReport()
   ns.Print(("Filters API %s · tooltip IDs %s · craft API %s"):format(yes(SetTrainerServiceTypeFilter),
     yes(C_TooltipInfo and C_TooltipInfo.GetTrainerService), yes(GetCraftInfo)))
   local tf = trainerFrame()
-  local sb = tf and type(tf.ScrollBox) == "table" and tf.ScrollBox or nil
-  local function fr(x)
+  local function rect(x)
     if type(x) ~= "table" then return "none" end
-    local l, t, r, b = screenRect(x)
-    return ("%s/%s %s a=%.2f ign=%s at %s,%s-%s,%s"):format(tostring(x:GetFrameStrata()), tostring(x:GetFrameLevel()),
-      x:IsVisible() and "visible" or "hidden", (x.GetEffectiveAlpha and clean(x:GetEffectiveAlpha())) or -1,
-      tostring(x.IsIgnoringParentAlpha and x:IsIgnoringParentAlpha()), tostring(l and math.floor(l)), tostring(t and math.floor(t)),
-      tostring(r and math.floor(r)), tostring(b and math.floor(b)))
+    local e = clean(x:GetEffectiveScale()) or 1
+    local l, t, r, b = clean(x:GetLeft()), clean(x:GetTop()), clean(x:GetRight()), clean(x:GetBottom())
+    if not (l and t) then return tostring(x:GetFrameStrata()) .. " (not placed)" end
+    return ("%s %s at %d,%d-%d,%d"):format(tostring(x:GetFrameStrata()), x:IsVisible() and "visible" or "hidden",
+      l * e, t * e, (r or l) * e, (b or t) * e)
   end
-  ns.Print(("Wrap: %s · mode %s · check: %s"):format(tostring(T.wrapped), T.WrapMode() and "inside" or "beside",
-    tostring(T.wrapProblem or (T.wrapChecked and "ok") or "not yet")))
-  ns.Print("  Blizzard window: " .. fr(tf))
-  ns.Print("  its list: " .. fr(sb))
-  ns.Print("  our slot: " .. fr(ns.UI and ns.UI.ListSlot and ns.UI.ListSlot()))
-  ns.Print("  our window: " .. fr(ns.UI and ns.UI.frame))
-  local r1 = visibleRows()[1]
-  ns.Print("  first row: " .. (r1 and fr(r1[1]) or "none"))
-  local tgt = sb and sb.ScrollTarget
-  if type(tgt) == "table" then ns.Print("  scroll target: " .. fr(tgt)) end
+  ns.Print(("Framed: %s · mode %s"):format(tostring(T.wrapped), T.WrapMode() and "framed" or "plain"))
+  ns.Print("  Blizzard window: " .. rect(tf))
+  ns.Print("  our window: " .. rect(ns.UI and ns.UI.frame))
   local rows = visibleRows()
   local list = {}
   for _, row in ipairs(rows) do

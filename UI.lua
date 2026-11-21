@@ -5,9 +5,8 @@ local UI = {}
 ns.UI = UI
 local T = ns.T
 
-local BASE_W, H = 790, 560 -- skills + detail; the Beast Training column is added on the right
-local W = BASE_W + 300 + 10  -- recomputed by UI.ApplyLayout
-local LIST_PX_W, LIST_PX_H = 320, 330 -- Blizzard's list (302 + scroll bar) when it can't be measured
+local BASE_W, H = 790, 560 -- skills + detail
+local W = BASE_W
 local LIST_W = 372
 local ROW_H = 30
 local RANK_ROW_H = 20
@@ -758,22 +757,7 @@ function UI.RefreshPet()
     f.mode:SetText("")
   end
   f.blizz:SetShown(T.beast)
-  f.blizz.label:SetText(T.WrapMode() and "Show Blizzard window" or "List in this window")
-  -- the right-hand column
-  local r = f.right
-  if T.beast and T.wrapped then
-    r.sub:SetText("Trainable now" .. (ns.pet and ns.pet.name and (" for " .. ns.pet.name) or ""))
-    r.slot.placeholder:SetText("")
-    r.hint:SetText("Click a rank here or on the left · scroll with the mouse wheel")
-  elseif T.beast then
-    r.sub:SetText("Blizzard's window is open beside this one")
-    r.slot.placeholder:SetText("The Beast Training list is in Blizzard's window.\n\nClick List in this window to bring it here.")
-    r.hint:SetText("")
-  else
-    r.sub:SetText("Not open")
-    r.slot.placeholder:SetText("Open Beast Training (button below) and its list of ranks you can train appears here.")
-    r.hint:SetText("")
-  end
+  f.blizz.label:SetText(T.WrapMode() and "Unframe" or "Frame together")
 end
 
 function UI.OnTrainState()
@@ -805,7 +789,7 @@ function UI.OnTrainState()
       txt = "Looking for the rank in Beast Training…"
     elseif s == "scroll" then
       local nm = T.target and (ns.AbilityName(T.target.r.a) .. " " .. T.target.r.r) or "the rank"
-      txt = ("|cff9cff7a%s is %s in the Beast Training list.|r Scroll it with the mouse wheel until it lights up, or click it there."):format(
+      txt = ("|cff9cff7a%s is %s in Beast Training's list (left).|r Scroll it with the mouse wheel until it lights up, or click it there."):format(
         nm, T.scrollDir == "up" and "further up" or "further down")
     elseif s == "blocked" then
       txt = "Beast Training won't train this rank now."
@@ -821,42 +805,49 @@ function UI.OnTrainState()
 end
 
 -- ------------------------------------------------------------------ build the window
--- The right-hand column: Blizzard's Beast Training list is placed in its slot while Beast Training is open.
-local function buildRight(parent)
-  local r = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-  r:SetPoint("TOPRIGHT", -10, -92)
-  r:SetPoint("BOTTOMRIGHT", -10, 44)
-  r:SetWidth(300)
-  backdrop(r, { .07, .06, .045, 1 }, { .45, .36, .16, .8 })
-  f.right = r
-  r.title = fs(r, "GameFontNormalLarge")
-  r.title:SetPoint("TOPLEFT", 10, -8)
-  r.title:SetText("Beast Training")
-  r.sub = fs(r, "GameFontHighlightSmall")
-  r.sub:SetPoint("TOPLEFT", r.title, "BOTTOMLEFT", 0, -4)
-  r.sub:SetPoint("RIGHT", -8, 0)
-  r.sub:SetTextColor(.8, .75, .65)
-  local slot = CreateFrame("Frame", nil, r, "BackdropTemplate")
-  slot:SetPoint("TOP", 0, -52)
-  slot:SetSize(LIST_PX_W, LIST_PX_H)
-  backdrop(slot, { 0, 0, 0, .55 }, { .3, .25, .15, .6 })
-  r.slot = slot
-  slot.placeholder = fs(slot, "GameFontDisable", "CENTER")
-  slot.placeholder:SetPoint("CENTER")
-  slot.placeholder:SetWidth(220)
-  if slot.placeholder.SetWordWrap then slot.placeholder:SetWordWrap(true) end
-  r.hint = fs(r, "GameFontDisableSmall", "CENTER")
-  r.hint:SetPoint("TOPLEFT", slot, "BOTTOMLEFT", 0, -6)
-  r.hint:SetPoint("TOPRIGHT", slot, "BOTTOMRIGHT", 0, -6)
-  if r.hint.SetWordWrap then r.hint:SetWordWrap(true) end
+-- Framed Beast Training: one border drawn behind Blizzard's window and ours (LOW layer, below both).
+local back
+local function getBack()
+  if back then return back end
+  back = CreateFrame("Frame", "PetTrainingPlusFrameBack", UIParent, "BackdropTemplate")
+  back:SetFrameStrata("LOW")
+  if back.SetBackdrop then
+    back:SetBackdrop({ bgFile = WHITE, edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 16,
+      insets = { left = 4, right = 4, top = 4, bottom = 4 } })
+    back:SetBackdropColor(.04, .035, .03, .96)
+    back:SetBackdropBorderColor(.85, .68, .32, 1)
+  end
+  back:EnableMouse(true) -- clicks between the two windows don't fall through to the world
+  back:Hide()
+  return back
 end
 
-function UI.ListSlot() return f and f.right and f.right.slot end
+function UI.SetFramed(on)
+  local tf = _G.ClassTrainerFrame
+  if on and f and tf then
+    local b = getBack()
+    b:ClearAllPoints()
+    b:SetPoint("TOPLEFT", tf, "TOPLEFT", -10, 10)
+    b:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 8, -8)
+    -- (Blizzard's window can be taller than ours: reach its bottom too)
+    local tb, fb = ns.clean(tf:GetBottom()), ns.clean(f:GetBottom())
+    local te, fe = ns.clean(tf:GetEffectiveScale()) or 1, ns.clean(f:GetEffectiveScale()) or 1
+    if tb and fb and tb * te < fb * fe then
+      b:ClearAllPoints()
+      b:SetPoint("TOPLEFT", tf, "TOPLEFT", -10, 10)
+      b:SetPoint("BOTTOM", tf, "BOTTOM", 0, -10)
+      b:SetPoint("RIGHT", f, "RIGHT", 8, 0)
+    end
+    b:Show()
+  elseif back then
+    back:Hide()
+  end
+end
 
 local function buildSkills(parent)
   local s = CreateFrame("Frame", nil, parent)
   s:SetPoint("TOPLEFT", 10, -118)
-  s:SetPoint("BOTTOMRIGHT", f.right, "BOTTOMLEFT", -10, 0)
+  s:SetPoint("BOTTOMRIGHT", -10, 44)
   f.skills = s
 
   -- left: search + filter + list
@@ -1004,7 +995,7 @@ end
 local function buildLog(parent)
   local l = CreateFrame("Frame", nil, parent, "BackdropTemplate")
   l:SetPoint("TOPLEFT", 10, -118)
-  l:SetPoint("BOTTOMRIGHT", f.right, "BOTTOMLEFT", -10, 0)
+  l:SetPoint("BOTTOMRIGHT", -10, 44)
   backdrop(l, { 0, 0, 0, .25 }, { .3, .25, .15, .6 })
   l:EnableMouseWheel(true)
   l:SetScript("OnMouseWheel", function(_, d) UI.Scroll(-d) end)
@@ -1038,13 +1029,27 @@ local function savePosition()
   if UI.attached then ns.db.trainerPos = pos else ns.db.pos = pos end
 end
 
+local movingTrainer
 local function startMove()
   if ns.InCombat() then return end -- the secure buttons hang on the window: it can't move in combat
-  f:StartMoving()
+  local tf = _G.ClassTrainerFrame
+  if UI.attached and tf and tf:IsShown() and tf.IsMovable and tf:IsMovable() then
+    -- we hang on Blizzard's window: move it (Blizzard marks it movable), ours follows
+    movingTrainer = tf
+    tf:StartMoving()
+  else
+    f:StartMoving()
+  end
 end
 local function stopMove()
-  f:StopMovingOrSizing()
-  savePosition()
+  if movingTrainer then
+    movingTrainer:StopMovingOrSizing()
+    movingTrainer = nil
+    if T.wrapped then UI.SetFramed(true) end
+  else
+    f:StopMovingOrSizing()
+    savePosition()
+  end
 end
 
 function UI.ResetPosition()
@@ -1067,53 +1072,31 @@ local function restorePosition()
   end
 end
 
--- Blizzard's list size (screen-independent units of its own window), measured when it exists.
-local function blizzardListSize()
-  local tf = _G.ClassTrainerFrame
-  local sb = tf and type(tf.ScrollBox) == "table" and tf.ScrollBox or nil
-  local bar = tf and type(tf.ScrollBar) == "table" and tf.ScrollBar or nil
-  local w, h = LIST_PX_W, LIST_PX_H
-  if sb then
-    local sw, sh = ns.clean(sb:GetWidth()), ns.clean(sb:GetHeight())
-    local bw = bar and ns.clean(bar:GetWidth())
-    if type(sw) == "number" and sw > 50 then w = sw + 5 + (type(bw) == "number" and bw or 10) + 2 end
-    if type(sh) == "number" and sh > 50 then h = sh end
-  end
-  local tscale = (tf and ns.clean(tf:GetScale())) or 1
-  return w * tscale, h * tscale
-end
-
--- At window scale s: the list slot (our units) and the right column's width.
-local function layoutFor(s)
-  local bw, bh = blizzardListSize()
-  local lw, lh = math.ceil(bw / s), math.ceil(bh / s)
-  return lw, lh, lw + 24
-end
-
--- Scale of the window (1.3 by default), never taller or wider than the screen.
+-- Scale of the window (1.3 by default), never taller than the screen, nor wider than the room it has: while Beast
+-- Training is open, the room to the right of Blizzard's window.
 local function windowScale()
   local want = (ns.db and ns.db.opts.scale) or SCALE
   local uh = UIParent and ns.clean(UIParent:GetHeight())
   local uw = UIParent and ns.clean(UIParent:GetWidth())
   local s = want
-  for _ = 1, 3 do
-    local _, _, rw = layoutFor(s)
-    local cap = want
-    if type(uh) == "number" and uh > 0 then cap = math.min(cap, uh * 0.95 / H) end
-    if type(uw) == "number" and uw > 0 then cap = math.min(cap, uw * 0.97 / (BASE_W + rw + 10)) end
-    s = cap
+  if type(uh) == "number" and uh > 0 then s = math.min(s, uh * 0.95 / H) end
+  if type(uw) == "number" and uw > 0 then
+    local room = uw * 0.98
+    local tf = _G.ClassTrainerFrame
+    if UI.attached and tf then
+      local r, te = ns.clean(tf:GetRight()), ns.clean(tf:GetEffectiveScale())
+      local ue = ns.clean(UIParent:GetEffectiveScale()) or 1
+      if r and te then room = uw - (r * te / ue) - 30 end
+    end
+    s = math.min(s, room / BASE_W)
   end
   return math.max(s, 0.6)
 end
 
 function UI.ApplyLayout()
   if not f or ns.InCombat() then return end
-  local s = windowScale()
-  local lw, lh, rw = layoutFor(s)
-  f:SetScale(s)
-  f.right:SetWidth(rw)
-  f.right.slot:SetSize(lw, lh)
-  W = BASE_W + rw + 10
+  f:SetScale(windowScale())
+  W = BASE_W
   f:SetWidth(W)
 end
 
@@ -1227,8 +1210,6 @@ function UI.Init()
   b.tpsub = fs(b, "GameFontDisableSmall", "RIGHT")
   b.tpsub:SetPoint("BOTTOMRIGHT", -10, 7)
 
-  buildRight(f)
-
   -- tabs
   f.tabSkills = textButton(f, "Skills", 90, 22)
   f.tabSkills:SetPoint("TOPLEFT", 12, -92)
@@ -1237,7 +1218,7 @@ function UI.Init()
   f.tabLog:SetPoint("LEFT", f.tabSkills, "RIGHT", 4, 0)
   f.tabLog:SetScript("OnClick", function() state.tab = "log"; UI.Refresh() end)
 
-  f.blizz = textButton(f, "Show Blizzard window", 150, 22)
+  f.blizz = textButton(f, "Unframe", 130, 22)
   f.blizz:SetPoint("LEFT", f.tabLog, "RIGHT", 12, 0)
   f.blizz:SetScript("OnClick", function()
     if ns.InCombat() then return end
@@ -1246,14 +1227,14 @@ function UI.Init()
     UI.Refresh()
   end)
   tooltipFor(f.blizz, function()
-    GameTooltip:SetText("Blizzard's Beast Training window")
-    GameTooltip:AddLine("Show Blizzard's whole window beside Pet Training+, or put its list back in the right-hand column.", 1, 1, 1, true)
-    GameTooltip:AddLine("/ptp dock or /ptp replace sets this for good.", .7, .7, .7)
+    GameTooltip:SetText("Beast Training")
+    GameTooltip:AddLine("Draw one border around Blizzard's Beast Training window and Pet Training+, or show them as two windows.", 1, 1, 1, true)
+    GameTooltip:AddLine("/ptp replace (framed) or /ptp dock (two windows) sets this for good.", .7, .7, .7)
   end)
 
   -- legend
   local legend = CreateFrame("Frame", nil, f)
-  legend:SetPoint("TOPRIGHT", f.right, "TOPLEFT", -12, 0)
+  legend:SetPoint("TOPRIGHT", -14, -92)
   legend:SetSize(420, 22)
   local items = { { "known", "You know" }, { "has", "Pet has" }, { "trainable", "Trainable" }, { "missing", "Not learned" }, { "unknown", "Not seen yet" } }
   local x = 0
@@ -1290,7 +1271,7 @@ function UI.Init()
   f:SetScript("OnHide", function()
     GameTooltip:Hide()
     -- our window closed while Beast Training stays open: give the Blizzard window back
-    if T.beast and T.wrapped then T.Wrap(false) end
+    if T.wrapped then T.Wrap(false) end
     placeSecure()
   end)
   ns.On("PLAYER_REGEN_ENABLED", function()
@@ -1337,32 +1318,15 @@ function UI.Toggle()
 end
 
 -- ------------------------------------------------------------------ Beast Training
-function UI.AttachToTrainer(trainer, wrap)
+function UI.AttachToTrainer(trainer, framed)
   if not f or not trainer then return end
-  if not UI.attached then
-    UI.wasShown = f:IsShown()
-    -- where Blizzard put its window: our default spot while wrapping (screen pixels)
-    local l, t, e = ns.clean(trainer:GetLeft()), ns.clean(trainer:GetTop()), ns.clean(trainer:GetEffectiveScale())
-    UI.trainerOrigin = (l and t and e) and { l * e, t * e } or nil
-  end
+  if not UI.attached then UI.wasShown = f:IsShown() end
   UI.attached = true
   UI.ApplyLayout()
   f:ClearAllPoints()
-  local p = ns.db.trainerPos
-  if p and p.point then
-    f:SetPoint(p.point, UIParent, p.rel or p.point, p.x or 0, p.y or 0)
-  elseif wrap then
-    local o, e = UI.trainerOrigin, f:GetEffectiveScale()
-    if o and e then
-      f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", o[1] / e, o[2] / e)
-    else
-      f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
-    end
-  else
-    f:SetPoint("TOPLEFT", trainer, "TOPRIGHT", 6, 0)
-  end
-  -- wrapping: Blizzard's list (HIGH) must show above our window, so ours stays in the MEDIUM layer
-  f:SetFrameStrata(wrap and "MEDIUM" or "DIALOG")
+  -- beside Blizzard's window, tops level (framed: a little gap for the shared border)
+  f:SetPoint("TOPLEFT", trainer, "TOPRIGHT", framed and 12 or 6, 0)
+  f:SetFrameStrata("MEDIUM")
 end
 
 -- You clicked a rank in Blizzard's list: show it here and get Train ready.
@@ -1395,8 +1359,8 @@ function UI.OnTrainerClosed()
   local was = UI.wasShown
   UI.attached = false
   UI.wasShown = nil
-  UI.trainerOrigin = nil
   f:SetFrameStrata("HIGH")
+  UI.ApplyLayout() -- the full screen width is available again
   restorePosition()
   if not was then f:Hide() end
   placeSecure()
