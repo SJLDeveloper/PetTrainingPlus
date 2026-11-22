@@ -768,7 +768,7 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
   elseif msg == "help" or msg == "?" then
     ns.Print("/ptp — open/close · /ptp log — learn log · /ptp origin — set your pet's origin to your target")
     ns.Print("/ptp replace | dock — how the window behaves in Beast Training · /ptp scale 1.3 — window size")
-    ns.Print("Drag the window anywhere (it remembers a separate spot for Beast Training) · /ptp resetpos — put it back")
+    ns.Print("Drag the window anywhere (in Beast Training, dragging moves both windows) · /ptp resetpos — put it back")
     ns.Print("/ptp loyalty — loyalty level, rate and progress · /ptp loyalty export — copy the recorded loyalty data")
     ns.Print("/ptp reset — clear this character")
   else

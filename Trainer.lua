@@ -1,5 +1,5 @@
 -- Pet Training+ · Beast Training. In Forever, Beast Training opens Blizzard's trainer window (ClassTrainerFrame) without
--- an NPC. Pet Training+ reads it, makes it invisible and shows its own window on top.
+-- an NPC. Pet Training+ reads it and attaches its own window beside it (see the v1.5 note below).
 --
 -- Rules learned in game by other Forever addon authors (Forever Hunter Pets, Hunter Pet Trainer; MIT):
 --   * BuyTrainerService, SelectTrainerService and ClassTrainer_SetSelection taint the trainer: Train is then blocked.

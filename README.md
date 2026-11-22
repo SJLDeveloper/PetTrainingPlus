@@ -36,8 +36,8 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 - `/ptp origin`: for a pet tamed before you installed this, target a beast of the same kind and use this to set its origin
 - `/ptp replace` or `/ptp dock`: Beast Training and Pet Training+ framed together as one window (the default), or as
   two windows side by side
-- `/ptp resetpos`: put the window back in its default places (it can be dragged anywhere, and remembers a
-  separate spot for when Beast Training is open)
+- `/ptp resetpos`: put the window back in its default place (it can be dragged anywhere; while Beast Training is open,
+  dragging moves both windows together)
 - `/ptp scale 1.3`: window size (text included); 1.3 is the default, capped to fit your screen
 - `/ptp debug`: print what the addon sees (trainer frames, pet, last log line)
 - `/ptp reset`: clear this character's known ranks, pets and log
@@ -51,7 +51,7 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
   That is why Train can take two presses: the first selects the rank in Blizzard's list, the second trains it.
   Blizzard's list only shows about 7 rows at a time and an addon can't scroll it, so when the rank you picked is
   further down, scroll Blizzard's list with the mouse wheel until it lights up (or click it there).
-- If you close Pet Training+ while Beast Training is open, the Blizzard window comes back.
+- While Beast Training is open, Pet Training+ opens and closes with it: Esc or either X closes both.
 
 ## Credits
 
@@ -64,7 +64,7 @@ Blizzard Entertainment.
 ## Development
 
 `tests/` holds a small mock of the WoW API that runs the main flows outside the game
-(Beast Training read and ghosting, the two-press Train, learn messages, tames, the Forever Bestiary link):
+(Beast Training read and framing, the two-press Train, learn messages, tames, the Forever Bestiary link):
 
     lua5.1 tests/run.lua
 
