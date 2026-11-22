@@ -240,6 +240,22 @@ function ns.KnownCount(a)
   return n
 end
 
+-- Could you get this rank now? You don't know it, and you are at least the rank's pet level: a beast of that level
+-- that knows it is one you can tame (you can tame beasts up to your own level); for trainer skills, a pet trainer
+-- teaches it. nil when the rank's level isn't known yet.
+function ns.PlayerLevel()
+  local lvl = try(UnitLevel, "player")
+  if type(lvl) == "number" and lvl > 0 then ns.lastPlayerLevel = lvl end
+  return ns.lastPlayerLevel
+end
+
+function ns.CanObtain(r)
+  if ns.IsKnown(r) then return false end
+  local need, have = ns.RankLevel(r), ns.PlayerLevel()
+  if not (need and have) then return nil end
+  return have >= need
+end
+
 -- ------------------------------------------------------------------ your current pet
 -- Spellbook of the pet: { [abilityKey] = rank }
 function ns.ReadPetSpells()
@@ -688,6 +704,10 @@ ns.On("SPELLS_CHANGED", function() ns.RefreshPetSoon() end)
 ns.On("UNIT_PET_TRAINING_POINTS", function() ns.RefreshPetSoon(0.2) end)
 ns.On("UNIT_LEVEL", function(unit) if unit == "pet" then ns.RefreshPetSoon() end end)
 ns.On("UNIT_NAME_UPDATE", function(unit) if unit == "pet" then ns.RefreshPetSoon() end end)
+ns.On("PLAYER_LEVEL_UP", function(lvl)
+  if type(clean(lvl)) == "number" then ns.lastPlayerLevel = lvl end
+  ns.Changed()
+end)
 ns.On("PLAYER_REGEN_ENABLED", function()
   if ns.pendingPetRead then ns.pendingPetRead = nil; ns.RefreshPetSoon(0.3) end
 end)

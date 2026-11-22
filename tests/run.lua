@@ -503,4 +503,25 @@ check(inEsc(), "back on the ESC list")
 ns.UI.Show(); ns.UI.Hide()
 check(not ns.UI.frame:IsShown(), "on our own, Hide works as before")
 check(#M.errors == 0, "no errors")
+-- 1.6.0: blue = you don't have this rank yet, but could at your level
+M.units.player = { name = "Shannon", level = 30 }
+M.fire("PLAYER_LEVEL_UP", 30); M.advance(0.3)
+local claw = ns.byKey.Claw
+ns.char.known.Claw = { [1] = { t = 1, src = "training" } }
+check(ns.CanObtain(claw.rankBy[1]) == false, "known rank: not blue")
+check(ns.CanObtain(claw.rankBy[4]) == true, "Claw 4 (pet level 24) at level 30: could get it")
+check(ns.CanObtain(bite.rankBy[5]) == nil or ns.RankLevel(bite.rankBy[5]) ~= nil, "unknown level: can't tell")
+ns.db.meta[claw.rankBy[5].pet] = { lvl = 32 }
+check(ns.CanObtain(claw.rankBy[5]) == false, "Claw 5 (pet level 32) at level 30: not yet")
+ns.UI.Show()
+ns.UI.Select(claw)
+ns.UI.Refresh()
+check(ns.UI.RankStyle(claw.rankBy[4]) == "obtainable", "Claw 4 shows blue (" .. tostring(ns.UI.RankStyle(claw.rankBy[4])) .. ")")
+check(ns.UI.RankStyle(claw.rankBy[1]) ~= "obtainable", "Claw 1 (known) not blue: " .. tostring(ns.UI.RankStyle(claw.rankBy[1])))
+check(ns.UI.RankStyle(claw.rankBy[5]) ~= "obtainable", "Claw 5 (level 32) not blue at 30")
+check(ns.UI.RankStyle(bite.rankBy[3]) == "has", "a rank the pet has stays green")
+M.units.player.level = 40
+M.fire("PLAYER_LEVEL_UP", 40); M.advance(0.3)
+check(ns.CanObtain(claw.rankBy[5]) == true, "after levelling to 40, Claw 5 can be got")
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

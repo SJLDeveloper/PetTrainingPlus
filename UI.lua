@@ -27,6 +27,7 @@ local STYLE = {
   trainable = { { .22, .30, .08 }, { .45, 1, .35 }, { .75, 1, .55 } },
   has       = { { .07, .34, .12 }, { .30, .92, .42 }, { 1, 1, 1 } },
   below     = { { .06, .17, .08 }, { .18, .40, .22 }, { .55, .75, .58 } },
+  obtainable = { { .05, .12, .30 }, { .30, .55, 1 }, { .60, .80, 1 } }, -- you don't have it, but could at your level
 }
 
 local f -- main frame
@@ -116,8 +117,11 @@ local function rankStyle(r)
     if ps == "trainable" then return "trainable", ps, detail end
     return "known", ps, detail
   end
+  -- not known yet, but within your reach at your level: blue
+  if ns.CanObtain(r) then return "obtainable", ps, detail end
   return hs == "missing" and "missing" or "unknown", ps, detail
 end
+UI.RankStyle = rankStyle
 
 local PET_TEXT = {
   has = "|cff4dff6aHas it|r", below = "|cff7fbf86Has higher|r", family = "|cffff5050Family can't|r",
@@ -156,6 +160,14 @@ function UI.RankTooltip(r)
     GameTooltip:AddLine("You have not learned this rank.", 1, .4, .4)
   else
     GameTooltip:AddLine("Not confirmed yet: open Beast Training with a pet that can learn it.", .7, .7, .7, true)
+  end
+  if hs ~= "known" and ns.CanObtain(r) then
+    local lvl = ns.RankLevel(r)
+    if r.a.kind == "general" then
+      GameTooltip:AddLine(("You could get it now: a pet trainer teaches it (pet level %d)."):format(lvl), .6, .8, 1, true)
+    else
+      GameTooltip:AddLine(("You could get it now: tame a beast of level %d or higher that knows it, and fight alongside it."):format(lvl), .6, .8, 1, true)
+    end
   end
   local lvl, tp = ns.RankLevel(r), ns.RankTP(r)
   if lvl or tp then
@@ -569,7 +581,13 @@ function UI.RefreshDetail()
       row.sel:SetShown(state.rank == r)
       row.rank:SetText("Rank " .. r.r)
       local hs = ns.HunterRankState(r)
-      row.rank:SetTextColor(hs == "known" and 1 or .6, hs == "known" and .82 or .6, hs == "known" and 0 or .6)
+      if hs == "known" then
+        row.rank:SetTextColor(1, .82, 0)
+      elseif ns.CanObtain(r) then
+        row.rank:SetTextColor(.6, .8, 1)
+      else
+        row.rank:SetTextColor(.6, .6, .6)
+      end
       local lvl, tp = ns.RankLevel(r), ns.RankTP(r)
       row.lvl:SetText(lvl or "|cff666666?|r")
       row.tp:SetText(tp or "|cff666666?|r")
@@ -941,7 +959,7 @@ local function buildSkills(parent)
   d.empty:SetWidth(300)
   if d.empty.SetWordWrap then d.empty:SetWordWrap(true) end
   d.empty:SetText("Pick a skill on the left.\n\nEach line shows every rank: |cffffd100gold|r = you know it, " ..
-    "|cff4dff6agreen|r = your pet has it, |cff9cff7abright edge|r = trainable now.")
+    "|cff4dff6agreen|r = your pet has it, |cff9cff7abright edge|r = trainable now, |cff99ccffblue|r = you could get it at your level.")
 
   local body = CreateFrame("Frame", nil, d)
   body:SetAllPoints()
@@ -1236,7 +1254,8 @@ function UI.Init()
   local legend = CreateFrame("Frame", nil, f)
   legend:SetPoint("TOPRIGHT", -14, -92)
   legend:SetSize(420, 22)
-  local items = { { "known", "You know" }, { "has", "Pet has" }, { "trainable", "Trainable" }, { "missing", "Not learned" }, { "unknown", "Not seen yet" } }
+  local items = { { "known", "Known" }, { "has", "Pet has" }, { "trainable", "Trainable" }, { "obtainable", "Can get" },
+    { "missing", "Not learned" }, { "unknown", "Not seen" } }
   local x = 0
   for i = #items, 1, -1 do
     local it = items[i]

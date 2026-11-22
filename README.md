@@ -6,7 +6,8 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 
 - **One line per pet skill, all ranks together.** Each rank is a small pill:
   gold = you know it, green = your current pet has it, bright edge = trainable right now,
-  red = you have not learned it, grey = not seen yet.
+  blue = you don't have it yet but could at your level (a beast of that level that knows it is one you can tame, or a
+  pet trainer teaches it), red = you have not learned it, grey = not seen yet.
 - **Only what your pet can learn.** A large toggle above the skill list hides every skill your current pet's family
   can't learn, or shows them all again. With no pet summoned, every skill is shown.
 - **Your pet at a glance.** Name, level, family, free training points, and for every skill
