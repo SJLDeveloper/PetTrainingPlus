@@ -2,7 +2,7 @@ package.path = "./tests/?.lua;" .. package.path
 local M = require("mock")
 local DIR = "./"
 local ns = {}
-for _, file in ipairs({ "Data.lua", "Core.lua", "Trainer.lua", "Bestiary.lua", "UI.lua" }) do
+for _, file in ipairs({ "Data.lua", "Core.lua", "Trainer.lua", "Bestiary.lua", "Loyalty.lua", "UI.lua" }) do
   local chunk = assert(loadfile(DIR .. file))
   chunk("PetTrainingPlus", ns)
 end
@@ -549,5 +549,57 @@ local box
 for _, fr in ipairs(M.allFrames) do if rawget(fr, "r") == bite.rankBy[3] and rawget(fr, "stripes") then box = fr end end
 check(box and box.stripes:IsShown() and box.second == "obtainable", "the Bite 3 box is striped")
 ns.char.known.Bite = savedBite
+check(#M.errors == 0, "no errors")
+-- 1.7.0: loyalty. The game's readings, and the recorder measuring rate × time per level
+local LY = ns.Loyalty
+check(LY.LevelFromName("Unruly") == 2 and LY.LevelFromName("Best Friend") == 6, "loyalty names map to levels")
+check(LY.LevelFromTP({ tpTotal = 44, level = 22 }) == 2, "TP 44 at pet level 22 = loyalty level 2 (Forever: TP = level × loyalty)")
+-- a fresh tame: Rebellious, rate 20
+M.units.target = { name = "Gray Bear", level = 21, guid = "Creature-0-1-2-3-1186-000ABC", fam = 4, famName = "Bear" }
+M.loyalty = { name = "Rebellious", happiness = 3, damage = 125, rate = 20 }
+M.tp = { 21, 0 }
+M.fire("UNIT_SPELLCAST_CHANNEL_START", "player", "x", 1515)
+M.advance(20)
+M.fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "x", 1515)
+M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.petSpells = { 16829 }
+M.fire("UNIT_PET", "player"); M.advance(0.1); M.fire("UNIT_PET", "player")
+M.advance(3)
+check(ns.pet.rec and ns.pet.rec.origin and ns.pet.rec.origin.npc == 1186, "tamed Gray Bear")
+M.advance(6)
+local st = LY.Status()
+check(st and st.level == 1 and st.rate == 20 and st.fromStart, "Rebellious 1/6, rate 20, measured from the start")
+M.advance(600) -- ten minutes out
+st = LY.Status()
+check(st.summonedSec >= 590 and math.abs(st.rateSec - 20 * st.summonedSec) < 1, "rate-seconds = 20 × time summoned (" .. math.floor(st.rateSec) .. ")")
+-- the level goes up
+M.loyalty.name = "Unruly"
+M.advance(6)
+local segs = ns.db.loyalty.segments
+local last = segs[#segs]
+check(last and last.from == 1 and last.to == 2 and last.complete and last.rateSec > 11500 and last.rateSec < 12500,
+  "segment Rebellious > Unruly, complete, ~12000 rate-seconds (" .. tostring(last and last.rateSec) .. ")")
+check(M.prints[#M.prints]:find("Unruly"), "chat: now Unruly")
+-- next level: estimate from the measured one (pretend Unruly takes the same)
+ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 24000 }
+M.advance(300)
+st = LY.Status()
+check(st.level == 2 and st.progress and st.progress > 0.2 and st.progress < 0.3 and st.etaSec and st.etaSec > 800 and st.etaSec < 950,
+  ("Unruly: ~25%% after 5 min of 20 min, ETA ~15 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
+-- dismissing the pet makes a gap: that time doesn't count
+local before = LY.Status().summonedSec
+M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(120)
+M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.fire("UNIT_PET", "player"); M.advance(8)
+check(LY.Status().summonedSec - before < 30, "time with the pet dismissed is not counted")
+-- export text
+local txt = LY.ExportText()
+check(txt:find("seg 1>2 complete=true rateSec=1") and txt:find("now ") , "export lists segments and the current run")
+LY.ShowExport()
+check(PetTrainingPlusLoyaltyExport and PetTrainingPlusLoyaltyExport:IsShown(), "export window opens")
+SlashCmdList.PETTRAININGPLUS("loyalty")
+check(M.prints[#M.prints]:find("level%-ups recorded"), "/ptp loyalty prints a report")
+ns.UI.Show(); ns.UI.Refresh()
+check(ns.UI.frame.petbar.info:GetText():find("Unruly") and ns.UI.frame.petbar.info:GetText():find("to Submissive"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

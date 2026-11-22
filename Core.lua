@@ -625,6 +625,7 @@ local function finishTame(tm)
   }
   local rec = ns.NewPetRecord(name, fam, petGuidKey())
   rec.origin = origin
+  if ns.Loyalty then ns.Loyalty.OnTamed() end -- its first loyalty level is measured from the start
   local cr = ns.db.creatures[tm.npc] or {}
   cr.name, cr.t, cr.teaches = tm.name, time(), ranks
   ns.db.creatures[tm.npc] = cr
@@ -731,6 +732,10 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
   msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
   if msg == "log" then
     if ns.UI then ns.UI.Show("log") end
+  elseif msg == "loyalty" then
+    if ns.Loyalty then ns.Loyalty.Report() end
+  elseif msg == "loyalty export" then
+    if ns.Loyalty then ns.Loyalty.ShowExport() end
   elseif msg == "origin" then
     ns.SetOriginFromTarget()
   elseif msg == "debug" then
@@ -764,6 +769,7 @@ SlashCmdList.PETTRAININGPLUS = function(msg)
     ns.Print("/ptp — open/close · /ptp log — learn log · /ptp origin — set your pet's origin to your target")
     ns.Print("/ptp replace | dock — how the window behaves in Beast Training · /ptp scale 1.3 — window size")
     ns.Print("Drag the window anywhere (it remembers a separate spot for Beast Training) · /ptp resetpos — put it back")
+    ns.Print("/ptp loyalty — loyalty level, rate and progress · /ptp loyalty export — copy the recorded loyalty data")
     ns.Print("/ptp reset — clear this character")
   else
     if ns.UI then ns.UI.Toggle() end

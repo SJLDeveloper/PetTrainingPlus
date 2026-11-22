@@ -181,7 +181,12 @@ C_SpellBook = {
 function IsSpellKnown(id, pet) return false end
 function IsPlayerSpell(id) return id == 5149 end
 M.tp = { 110, 41 }
-C_PetInfo = { GetPetTrainingPoints = function() return M.tp[1], M.tp[2] end }
+M.loyalty = { name = "Unruly", happiness = 3, damage = 125, rate = 20 }
+C_PetInfo = {
+  GetPetTrainingPoints = function() return M.tp[1], M.tp[2] end,
+  GetPetLoyalty = function() return M.loyalty.name end,
+  GetPetHappiness = function() return M.loyalty.happiness, M.loyalty.damage, M.loyalty.rate end,
+}
 
 -- trainer
 M.services = {}

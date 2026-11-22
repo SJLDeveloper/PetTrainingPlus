@@ -787,7 +787,18 @@ function UI.RefreshPet()
     if SetPortraitTexture then pcall(SetPortraitTexture, b.portrait, "pet") end
     b.portrait:Show()
     b.name:SetText(p.name or "?")
-    b.info:SetText(("Level %s %s"):format(p.level or "?", ns.FamName(p.fam)))
+    local info = ("Level %s %s"):format(p.level or "?", ns.FamName(p.fam))
+    local ly = ns.Loyalty and ns.Loyalty.Status()
+    if ly and ly.level then
+      local LN = ns.Loyalty.NAMES
+      info = info .. ("  ·  |cffffd100%s|r %d/%d"):format(LN[ly.level] or tostring(ly.name), ly.level, ns.Loyalty.MAX)
+      if ly.rate and ly.rate > 0 then info = info .. " |cff9cff7a(gaining)|r"
+      elseif ly.rate and ly.rate < 0 then info = info .. " |cffff6060(losing)|r" end
+      if ly.etaSec and LN[ly.level + 1] then
+        info = info .. ("  ·  ~%s to %s"):format(ns.Loyalty.FormatDuration(ly.etaSec), LN[ly.level + 1])
+      end
+    end
+    b.info:SetText(info)
     if p.tpFree then
       local c = p.tpFree < 0 and "|cffff5050" or "|cff9cff7a"
       b.tp:SetText(c .. p.tpFree .. "|r |cffaaaaaaTP free|r")

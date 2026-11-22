@@ -24,10 +24,15 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
   **View in Bestiary**, to open that ability in Forever Bestiary (Pet Hunter) exactly as if you had clicked it in its
   Abilities tab: every rank and the beasts that teach it. Needs Forever Bestiary (Pet Hunter) loaded.
 
+- **Loyalty.** The pet bar shows your pet's loyalty level (Rebellious 1/6 … Best Friend 6/6) and whether it is gaining
+  or losing loyalty. The game hides loyalty points, so Pet Training+ records how much "loyalty rate × time summoned"
+  each level takes (from a fresh tame onwards) and, once a level has been measured, estimates the time to the next one.
+
 ## Commands
 
 - `/ptp`: open or close the window
 - `/ptp log`: open the Learn Log
+- `/ptp loyalty`: loyalty level, rate and progress; `/ptp loyalty export`: the recorded loyalty data, to copy
 - `/ptp origin`: for a pet tamed before you installed this, target a beast of the same kind and use this to set its origin
 - `/ptp replace` or `/ptp dock`: Beast Training and Pet Training+ framed together as one window (the default), or as
   two windows side by side
