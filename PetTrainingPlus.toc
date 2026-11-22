@@ -2,7 +2,7 @@
 ## Title: WoW Pet Training|cff9cff7a+|r
 ## Notes: Replaces the Beast Training window: every pet skill with all ranks grouped, what your pet has and can use, and a log of which creature taught you each rank.
 ## Author: Pet Training+
-## Version: 1.6.0
+## Version: 1.6.1
 ## OptionalDeps: ForeverBestiaryPetHunter
 ## X-License: MIT
 ## IconTexture: Interface\Icons\Ability_Hunter_BeastTraining

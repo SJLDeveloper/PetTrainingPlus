@@ -524,4 +524,30 @@ M.units.player.level = 40
 M.fire("PLAYER_LEVEL_UP", 40); M.advance(0.3)
 check(ns.CanObtain(claw.rankBy[5]) == true, "after levelling to 40, Claw 5 can be got")
 check(#M.errors == 0, "no errors")
+-- 1.6.1: striped boxes: your pet has a rank you haven't learned (green with your colour in stripes)
+M.units.pet = { name = "Fang", level = 30, guid = "Pet-0-1-2-3-165189-0400AB", fam = 5, famName = "Boar" }
+M.petSpells = { 17256, 26177, 14916 } -- Bite 3
+M.fire("UNIT_PET", "player"); M.advance(2)
+local savedBite = ns.char.known.Bite
+ns.char.known.Bite = { [1] = { t = 1 }, [2] = { t = 1 } } -- you know Bite 1-2, not 3
+local k1, _, _, k2 = ns.UI.RankStyle(bite.rankBy[3])
+check(k1 == "has" and k2 == "obtainable", "pet has Bite 3, you could learn it: green + blue stripes (" .. tostring(k1) .. "/" .. tostring(k2) .. ")")
+ns.char.known.Bite = { [1] = { t = 1 }, [2] = { t = 1 }, [3] = { t = 1 } }
+k1, _, _, k2 = ns.UI.RankStyle(bite.rankBy[3])
+check(k1 == "has" and k2 == nil, "pet has it and you know it: plain green")
+ns.char.known.Bite = { [1] = { t = 1 } }
+ns.db.meta[bite.rankBy[3].pet] = { lvl = 99 } -- a level you can't reach
+k1, _, _, k2 = ns.UI.RankStyle(bite.rankBy[3])
+check(k1 == "has" and (k2 == "missing" or k2 == "unknown"), "pet has it, you can't get it yet: green + red/grey stripes (" .. tostring(k2) .. ")")
+ns.db.meta[bite.rankBy[3].pet] = nil
+ns.char.known.Bite = { [1] = { t = 1 }, [2] = { t = 1 } }
+k1, _, _, k2 = ns.UI.RankStyle(bite.rankBy[2])
+check(k1 == "below" and k2 == nil, "a rank below the pet's: not striped")
+-- the box itself shows the stripes
+ns.UI.Show(); ns.db.opts.filter = "all"; ns.db.opts.petOnly = false; ns.UI.Refresh()
+local box
+for _, fr in ipairs(M.allFrames) do if rawget(fr, "r") == bite.rankBy[3] and rawget(fr, "stripes") then box = fr end end
+check(box and box.stripes:IsShown() and box.second == "obtainable", "the Bite 3 box is striped")
+ns.char.known.Bite = savedBite
+check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

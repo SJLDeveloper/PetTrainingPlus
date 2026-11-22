@@ -108,9 +108,20 @@ end
 
 -- ------------------------------------------------------------------ rank state for display
 -- The combined look of a rank: what your pet has wins over what you know.
+-- Returns the look of a rank: key, pet state, detail, and a second key when two things are true at once (your pet has
+-- this rank but you haven't learned it: the box is striped with your own state).
+local function hunterKey(r, hs)
+  if ns.CanObtain(r) then return "obtainable" end
+  return hs == "missing" and "missing" or "unknown"
+end
+
 local function rankStyle(r)
   local ps, detail = ns.RankPetState(r)
-  if ps == "has" then return "has", ps, detail end
+  if ps == "has" then
+    local hs = ns.HunterRankState(r)
+    if hs ~= "known" then return "has", ps, detail, hunterKey(r, hs) end
+    return "has", ps, detail
+  end
   if ps == "below" then return "below", ps, detail end
   local hs = ns.HunterRankState(r)
   if hs == "known" then
@@ -118,8 +129,7 @@ local function rankStyle(r)
     return "known", ps, detail
   end
   -- not known yet, but within your reach at your level: blue
-  if ns.CanObtain(r) then return "obtainable", ps, detail end
-  return hs == "missing" and "missing" or "unknown", ps, detail
+  return hunterKey(r, hs), ps, detail
 end
 UI.RankStyle = rankStyle
 
@@ -161,7 +171,9 @@ function UI.RankTooltip(r)
   else
     GameTooltip:AddLine("Not confirmed yet: open Beast Training with a pet that can learn it.", .7, .7, .7, true)
   end
-  if hs ~= "known" and ns.CanObtain(r) then
+  if hs ~= "known" and ns.pet and ns.pet.ranks[r.a.key] == r.r then
+    GameTooltip:AddLine("Your pet has this rank but you haven't learned it: fight alongside it and you'll learn it.", .6, 1, .7, true)
+  elseif hs ~= "known" and ns.CanObtain(r) then
     local lvl = ns.RankLevel(r)
     if r.a.kind == "general" then
       GameTooltip:AddLine(("You could get it now: a pet trainer teaches it (pet level %d)."):format(lvl), .6, .8, 1, true)
@@ -179,10 +191,28 @@ function UI.RankTooltip(r)
 end
 
 -- ------------------------------------------------------------------ rank pills
+local STRIPES = 4
 local function makePill(parent)
   local p = CreateFrame("Button", nil, parent, "BackdropTemplate")
   p:SetSize(17, 17)
-  p.text = fs(p, "GameFontHighlightSmall", "CENTER")
+  -- diagonal stripes for a second state, clipped to the box; the number sits above them
+  if p.SetClipsChildren then p:SetClipsChildren(true) end
+  p.stripes = CreateFrame("Frame", nil, p)
+  p.stripes:SetPoint("TOPLEFT", 1, -1)
+  p.stripes:SetPoint("BOTTOMRIGHT", -1, 1)
+  p.stripes.bands = {}
+  for k = 1, STRIPES do
+    local t = p.stripes:CreateTexture(nil, "ARTWORK")
+    t:SetSize(3, 30)
+    t:SetPoint("CENTER", p.stripes, "CENTER", (k - (STRIPES + 1) / 2) * 7, 0)
+    if t.SetRotation then t:SetRotation(math.pi / 4) end
+    p.stripes.bands[k] = t
+  end
+  p.stripes:Hide()
+  p.top = CreateFrame("Frame", nil, p)
+  p.top:SetAllPoints()
+  p.top:SetFrameLevel(p:GetFrameLevel() + 3)
+  p.text = fs(p.top, "GameFontHighlightSmall", "CENTER")
   p.text:SetPoint("CENTER", 0, 0)
   p:SetScript("OnEnter", function(self)
     if not self.r then return end
@@ -201,10 +231,19 @@ end
 
 local function stylePill(p, r)
   p.r = r
-  local key = rankStyle(r)
+  local key, _, _, second = rankStyle(r)
   local s = STYLE[key]
   backdrop(p, s[1], s[2], key == "trainable" and 2 or 1)
-  p.text:SetTextColor(s[3][1], s[3][2], s[3][3])
+  p.key, p.second = key, second
+  if second then
+    local c = STYLE[second][2] -- the second state's bright colour
+    for _, t in ipairs(p.stripes.bands) do t:SetColorTexture(c[1], c[2], c[3], .9) end
+    p.stripes:Show()
+    p.text:SetTextColor(1, 1, 1)
+  else
+    p.stripes:Hide()
+    p.text:SetTextColor(s[3][1], s[3][2], s[3][3])
+  end
   p.text:SetText(r.r)
 end
 
@@ -959,7 +998,7 @@ local function buildSkills(parent)
   d.empty:SetWidth(300)
   if d.empty.SetWordWrap then d.empty:SetWordWrap(true) end
   d.empty:SetText("Pick a skill on the left.\n\nEach line shows every rank: |cffffd100gold|r = you know it, " ..
-    "|cff4dff6agreen|r = your pet has it, |cff9cff7abright edge|r = trainable now, |cff99ccffblue|r = you could get it at your level.")
+    "|cff4dff6agreen|r = your pet has it, |cff9cff7abright edge|r = trainable now, |cff99ccffblue|r = you could get it at your level, green with stripes = your pet has it but you haven't learned it.")
 
   local body = CreateFrame("Frame", nil, d)
   body:SetAllPoints()
