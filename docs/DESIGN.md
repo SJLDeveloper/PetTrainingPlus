@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.4** · last updated 2026-11-22.
+**Current version: 1.7.5** · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -150,7 +150,7 @@ Each entry looks like this:
 ```
 
 - `key` is the English name. It is the identity everywhere: saved data, the Bestiary link, `famCan`.
-- `kind = "general"` means a pet trainer teaches it and every family can learn it (Growl, resistances, Cobra Reflexes).
+- `kind = "general"` means a pet trainer teaches it and every family can learn it (Growl, the resistances).
 - `fam` is complete for the families it lists. An empty `fam` on a `tame` skill means unknown.
 - `pet` is the spell in the pet's spellbook; `hunter` is the spell the hunter learns, which carries the learn message's
   link.
@@ -162,9 +162,12 @@ Each entry looks like this:
 - Prowl: Cat only.
 - Thunderstomp: Gorilla only.
 - Shell Shield: Turtle only.
-- Cobra Reflexes: `general`, every family, pet level 30, from a pet trainer.
 - Harass: removed and left as a commented stub. It is a relic in the game files, has no family, and can't be learned or
   taught.
+- Cobra Reflexes (v1.7.5): removed and left as a commented stub, because it isn't available in Forever (Shannon, in
+  game). v1.1.1 had added it as a pet-trainer skill for every family at pet level 30.
+- Removing a skill is safe for saved data: every lookup by skill name (`ns.byKey`) checks for a missing skill, so old
+  log entries or known ranks for it are ignored, and its learn messages no longer match.
 
 Core builds index tables at load: `ns.byKey`, `ns.byPet`, `ns.byHunter`. Each ability gets `a.rankBy[r]`, `a.famSet`
 and `a.maxRank`, and each rank gets `r.a` pointing back to its ability.
@@ -541,7 +544,7 @@ Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy 
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 200 checks at v1.7.4; all must pass before a push.
+- `lua5.1 tests/run.lua`. 201 checks at v1.7.5; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -583,6 +586,7 @@ Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy 
 | 1.7.2 | Loyalty recorder counts combat time at the last rate; same-second samples aren't gaps; a lower pet level restarts the run | first in-game segment lost ~5 min of fights; a Carrion Bird record mix-up |
 | 1.7.3 | Ship loyalty thresholds as 18,000 × level rate-seconds (provisional) | three Hyena levels fit within 0.6% (levels 2–3) and 4.7% (noisy level 1); the pet bar can now predict, and the next levels test it |
 | 1.7.4 | Record activity per level (resting, AFK, mounted, flight, your XP, pet XP); your own measurements beat the shipped table; ship level 4 as measured, level 5 unknown | the 18,000 × level model missed level 4 by 70%, in a stretch with little fighting |
+| 1.7.5 | Remove Cobra Reflexes (commented stub, like Harass) | not available in Forever; the v1.1.1 entry was wrong |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
