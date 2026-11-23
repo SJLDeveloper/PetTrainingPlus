@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.2** · last updated 2026-11-22.
+**Current version: 1.7.3** · last updated 2026-11-22.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -461,20 +461,29 @@ each level's threshold, then ship those numbers.
 - **`complete` is true only if the level was watched from its start**: a fresh tame (`L.OnTamed`, within 120 s), or a
   run opened by the previous level-up. Pets already partway through a level give partial segments, which aren't used for
   estimates.
-- `L.Needed(level)`: the `L.SHIPPED[level]` value if there is one, else the average `rateSec` of the complete segments
+- `L.Needed(level)`: the `L.SHIPPED[level]` value if there is one (v1.7.3: always, for levels 1–5), else the average `rateSec` of the complete segments
   for that level. `L.Status()` gives the progress and `etaSec = (need − rateSec) / currentRate`.
 - Display:
   - pet bar: "Unruly 2/6 (gaining)", plus "~N to Submissive" once an estimate exists;
   - `/ptp loyalty`: a report;
   - `/ptp loyalty export`: a copyable text frame (`PetTrainingPlusLoyaltyExport`).
 
-### Status
-- `L.SHIPPED = {}`. The thresholds will be filled in from Shannon's recording, started Nov 22.
-- **First measurement** (Nov 22, v1.7.0, pet level 27–29 Hyena, fresh tame): Rebellious → Unruly took **18,850
-  rate-seconds** over 1,184 s summoned and 1,482 s wall clock. Rate ranged −10 to 20 (unhappy for about 107 s, content
-  for 106 s, happy for 970 s). The 298 s between wall time and summoned time was mostly fights dropped by the v1.7.0
-  combat gap, so the true value is likely between 18,850 and about 24,800 (if those 298 s ran at rate 20). Don't ship it;
-  re-measure level 1 with a fresh tame on v1.7.2 or later.
+### Status: thresholds (v1.7.3, provisional)
+Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy and rate 20 from level 2 on):
+
+| Step | Rate-seconds measured | 18,000 × level | Summoned | Fighting | Clock | Notes |
+|---|---|---|---|---|---|---|
+| 1 → 2 | 18,850 | 18,000 (+4.7%) | 1,184 s | not counted | 1,482 s | v1.7.0; rate −10 to 20; fights over 20 s dropped |
+| 2 → 3 | 35,800 | 36,000 (−0.6%) | 1,790 s | 336 s | 2,236 s | started on v1.7.0, reload partway |
+| 3 → 4 | 54,100 | 54,000 (+0.2%) | 2,705 s | 1,038 s | 2,762 s | all on v1.7.2; the cleanest |
+
+- **Model: level n → n+1 takes 18,000 × n rate-seconds**, shipped as `L.SHIPPED[1..5]` (`L.PER_LEVEL = 18000`). At rate
+  20 that is 15, 30, 45, 60 and 75 minutes: 3 h 45 min from tame to Best Friend.
+- Levels 4 → 5 and 5 → 6 are predictions; the next level-ups test them. One pet, one family, one pet level so far.
+- **Loyalty grows with time, not pet XP**: the pet stayed level 29 for levels 2–4.
+- My earlier guess that 2 → 3 was undercounted (to 37,000–39,000) was wrong: the measured value already matched the line.
+- The level-1 overshoot is probably the noisy start: periods at rate −10 (the game may clamp loyalty at 0, where the
+  recorder subtracts) and level-up detection up to 5 s late.
 - Open: whether loyalty is gained while the pet is dismissed. Compare `wallSec` with `summonedSec` (since v1.7.2, fights are inside `summonedSec`, so the remaining difference is dismissed time, loading screens and deaths).
 - Open: whether rate × time alone fills a level. If complete segments for the same level differ widely between pets,
   look at pet level, happiness time and gaps.
@@ -522,7 +531,7 @@ each level's threshold, then ship those numbers.
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 190 checks at v1.7.2; all must pass before a push.
+- `lua5.1 tests/run.lua`. 192 checks at v1.7.3; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -562,6 +571,7 @@ each level's threshold, then ship those numbers.
 | 1.7.0 | TP = pet level × loyalty level | Shannon's numbers (22 × 2 = 44) |
 | 1.7.1 | Added this design doc and `CLAUDE.md`; the doc is updated on every push. Fixed stale README/help text from before v1.5 | keep the logic written down for future changes |
 | 1.7.2 | Loyalty recorder counts combat time at the last rate; same-second samples aren't gaps; a lower pet level restarts the run | first in-game segment lost ~5 min of fights; a Carrion Bird record mix-up |
+| 1.7.3 | Ship loyalty thresholds as 18,000 × level rate-seconds (provisional) | three Hyena levels fit within 0.6% (levels 2–3) and 4.7% (noisy level 1); the pet bar can now predict, and the next levels test it |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
@@ -570,8 +580,8 @@ each level's threshold, then ship those numbers.
 
 - In-game checks still to report back: the v1.5.0 framed border spacing, v1.5.1 ESC linking, v1.6.x colours and stripes,
   and the v1.7.0 recorder.
-- Fill `L.SHIPPED` from the loyalty recording (v1.7.2+ segments only), add tests for it, and release. Level 1 needs
-  re-measuring.
+- Confirm the loyalty model: Dependable → Faithful should take ~72,000 rate-seconds (60 min at rate 20) and
+  Faithful → Best Friend ~90,000 (75 min). Re-measure level 1 on a fresh tame. Check another family and pet level.
 - The realm part of loyalty run keys is empty in game ("Censuh-#2"): `GetRealmName` returned nothing. Harmless, since
   the key only needs to be unique per character.
 - Data gaps: several ranks have no `lvl`/`tp` in Data.lua. They fill in from Beast Training as the hunter meets them, and

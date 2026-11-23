@@ -14,9 +14,13 @@ local try, clean = ns.try, ns.clean
 L.NAMES = { "Rebellious", "Unruly", "Submissive", "Dependable", "Faithful", "Best Friend" }
 L.MAX = #L.NAMES
 
--- Rate-seconds each level takes before the next one (from complete recorded segments; shipped when known).
--- [level] = rate-seconds from the start of that level to the next. Empty until measured.
+-- Rate-seconds each level takes before the next one: [level] = rate-seconds from the start of that level to the next.
+-- Provisional (v1.7.3): 18,000 × level, fitted to Shannon's Hyena (Nov 22): 1>2 18,850 (noisy: negative rate and
+-- uncounted fights), 2>3 35,800, 3>4 54,100. Levels 4 and 5 are predictions. At rate 20 that is 15, 30, 45, 60 and
+-- 75 minutes. Your own complete measurements don't override these; they are kept for checking them.
+L.PER_LEVEL = 18000
 L.SHIPPED = {}
+for lv = 1, 5 do L.SHIPPED[lv] = L.PER_LEVEL * lv end
 
 local SAMPLE = 5 -- seconds between samples while the pet is out
 

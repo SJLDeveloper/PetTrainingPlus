@@ -584,8 +584,9 @@ check(M.prints[#M.prints]:find("Unruly"), "chat: now Unruly")
 ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 24000 }
 M.advance(300)
 st = LY.Status()
-check(st.level == 2 and st.progress and st.progress > 0.2 and st.progress < 0.3 and st.etaSec and st.etaSec > 800 and st.etaSec < 950,
-  ("Unruly: ~25%% after 5 min of 20 min, ETA ~15 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
+check(st.level == 2 and st.progress and st.progress > 0.15 and st.progress < 0.18 and st.etaSec and st.etaSec > 1450 and st.etaSec < 1550,
+  ("Unruly: shipped 36,000 wins: ~1/6 after 5 min of 30, ETA ~25 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
+check(LY.Needed(1) == 18000 and LY.Needed(4) == 72000 and LY.Needed(5) == 90000 and LY.Needed(6) == nil, "shipped: 18,000 × level, none past Best Friend")
 -- dismissing the pet makes a gap: that time doesn't count
 local before = LY.Status().summonedSec
 M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(120)
