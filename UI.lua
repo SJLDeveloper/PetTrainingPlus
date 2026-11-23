@@ -792,7 +792,8 @@ function UI.RefreshPet()
     if ly and ly.level then
       local LN = ns.Loyalty.NAMES
       info = info .. ("  ·  |cffffd100%s|r %d/%d"):format(LN[ly.level] or tostring(ly.name), ly.level, ns.Loyalty.MAX)
-      if ly.rate and ly.rate > 0 then info = info .. " |cff9cff7a(gaining)|r"
+      if ly.rate and ly.rate > 0 and ly.resting and ly.level < ns.Loyalty.MAX then info = info .. " |cffaaaaaa(paused: resting)|r"
+      elseif ly.rate and ly.rate > 0 then info = info .. " |cff9cff7a(gaining)|r"
       elseif ly.rate and ly.rate < 0 then info = info .. " |cffff6060(losing)|r" end
       if ly.etaSec and LN[ly.level + 1] then
         info = info .. ("  ·  ~%s to %s"):format(ns.Loyalty.FormatDuration(ly.etaSec), LN[ly.level + 1])

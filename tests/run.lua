@@ -580,17 +580,19 @@ M.loyalty.name = "Unruly"
 M.advance(6)
 local segs = ns.db.loyalty.segments
 local last = segs[#segs]
+check(last and last.method == 2, "segment counted the v1.7.6 way (method 2)")
 check(last and last.from == 1 and last.to == 2 and last.complete and last.rateSec > 11500 and last.rateSec < 12500,
   "segment Rebellious > Unruly, complete, ~12000 rate-seconds (" .. tostring(last and last.rateSec) .. ")")
 check(M.prints[#M.prints]:find("Unruly"), "chat: now Unruly")
 -- next level: estimate from the measured one (pretend Unruly takes the same)
-ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 24000 }
+ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 99000 } -- counted the old way: ignored
+ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 24000, method = 2 }
 M.advance(300)
 st = LY.Status()
 check(st.level == 2 and st.progress and st.progress > 0.2 and st.progress < 0.3 and st.etaSec and st.etaSec > 800 and st.etaSec < 950,
   ("Unruly: your measurement (24,000) comes first: ~25%% after 5 min, ETA ~15 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
 local n4, src4 = LY.Needed(4)
-check(n4 == 122000 and src4 == "shipped" and LY.Needed(5) == nil and LY.Needed(6) == nil, "shipped table for unmeasured levels; level 5 not known yet")
+check(n4 == 72000 and src4 == "shipped" and LY.Needed(5) == 90000 and LY.Needed(6) == nil, "shipped: 18,000 × level for levels 1-5")
 -- dismissing the pet makes a gap: that time doesn't count
 local before = LY.Status().summonedSec
 M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(120)
@@ -656,8 +658,18 @@ IsMounted = function() return M.mounted or false end
 UnitOnTaxi = function() return false end
 M.advance(6)
 local x0 = arun.xp or 0
-M.resting = true; M.advance(60); M.resting = false
-check(arun.restSec >= 55 and arun.restSec <= 65, "resting time counted (" .. arun.restSec .. " s)")
+local r0, s0 = arun.rateSec, arun.summonedSec
+M.resting = true; M.advance(30)
+check(LY.Status().resting and LY.Status().etaSec == nil, "resting: no ETA (paused)")
+ns.UI.Show(); ns.UI.Refresh(); M.advance(0.3)
+check(ns.UI.frame.petbar.info:GetText():find("paused: resting"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
+M.advance(30); M.resting = false
+check(math.abs(arun.rateSec - r0) < 1 and arun.summonedSec - s0 >= 55, "resting: summoned time counts, loyalty doesn't (v1.7.6)")
+M.combat = true; M.resting = true; M.advance(20); M.combat = false; M.resting = false; M.advance(1)
+check(math.abs(arun.rateSec - r0) < 1 + 20 * 2, "resting in combat doesn't build loyalty either")
+M.advance(10)
+check(arun.rateSec - r0 > 150, "out of the inn: loyalty counts again")
+check(arun.restSec >= 75 and arun.restSec <= 85, "resting time counted (" .. arun.restSec .. " s)")
 M.afk = true; M.advance(30); M.afk = false
 check(arun.afkSec >= 25 and arun.afkSec <= 35, "AFK time counted (" .. arun.afkSec .. " s)")
 M.mounted = true; M.advance(20); M.mounted = false
@@ -677,6 +689,6 @@ check(arun.xp - x0 == 4300, "experience while dismissed is not counted")
 M.loyalty.name = "Submissive"; M.advance(6)
 local lastSeg = ns.db.loyalty.segments[#ns.db.loyalty.segments]
 check(lastSeg.restSec >= 55 and lastSeg.afkSec >= 25 and lastSeg.xp >= 4300 and lastSeg.petXp >= 300, "segment keeps activity")
-check(LY.ExportText():find("rest=%d+ afk=%d+ mount=%d+ taxi=%d+ xp=%d+ petXp=%d+"), "export shows activity")
+check(LY.ExportText():find("rest=%d+ afk=%d+ mount=%d+ taxi=%d+ xp=%d+ petXp=%d+ method=%d"), "export shows activity and method")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

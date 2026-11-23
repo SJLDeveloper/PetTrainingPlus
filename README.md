@@ -26,9 +26,9 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
 
 - **Loyalty.** The pet bar shows your pet's loyalty level (Rebellious 1/6 … Best Friend 6/6) and whether it is gaining
   or losing loyalty, and an estimate of the time to the next level. The game hides loyalty points, so the estimates
-  come from measured play and are still being worked out: the first levels take roughly 15, 30 and 45 minutes at a
-  normal rate, and later ones longer. Pet Training+ records your own levels too (time summoned, fighting, resting,
-  experience) and uses them for your estimates once it has them.
+  come from measured play and are still being tested: at a normal rate, each level takes about 15 minutes more than
+  the last (15, 30, 45, 60, 75), and loyalty doesn't grow while you rest in a city or inn, so the estimate pauses
+  there. Pet Training+ records your own levels too and uses them for your estimates once it has them.
 
 ## Commands
 

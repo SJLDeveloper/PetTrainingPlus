@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.5** · last updated 2026-11-23.
+**Current version: 1.7.6** · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -451,7 +451,11 @@ each level's threshold, then ship those numbers.
   exists, each step adds `dt` at the last rate seen before the fight, and also adds it to `combatSec`. If the pet
   disappears in combat, counting stops. Before v1.7.2 any fight over 20 s was dropped as a gap: Shannon's first Hyena
   segment lost about 5 minutes that way.
-- **Activity** (v1.7.4, `trackActivity`): every counted step also adds `dt` to `restSec` (`IsResting`), `afkSec`
+- **Resting doesn't count** (v1.7.6): a step taken while `IsResting()` (city or inn), in or out of combat, adds `dt`
+  to `summonedSec` and `restSec` but nothing to `rateSec`. While resting, `L.Status` gives no ETA and the pet bar reads
+  "(paused: resting)". Runs and segments carry `method` (`L.METHOD = 2`); segments without it were counted the old way
+  (all summoned time) and are not used for estimates.
+- **Activity** (v1.7.4, `trackActivity`): every counted step also adds `dt` to `afkSec`
   (`UnitIsAFK`), `mountSec` (`IsMounted`) and `taxiSec` (`UnitOnTaxi`). It also adds your experience gained (`UnitXP`,
   with level-ups handled through `UnitXPMax`) to `xp`, and the pet's (`GetPetExperience`) to `petXp`. Experience
   gained in fights is picked up at the first sample after the fight. Nothing is added across a gap (pet dismissed).
@@ -469,34 +473,39 @@ each level's threshold, then ship those numbers.
 - **`complete` is true only if the level was watched from its start**: a fresh tame (`L.OnTamed`, within 120 s), or a
   run opened by the previous level-up. Pets already partway through a level give partial segments, which aren't used for
   estimates.
-- `L.Needed(level)` (v1.7.4 order): the average `rateSec` of your complete segments for that level, else `L.SHIPPED[level]`. (v1.7.3 had the shipped value first.) The complete segments are
+- `L.Needed(level)` (v1.7.4 order): the average `rateSec` of your complete segments for that level counted the current way (`method == L.METHOD`, v1.7.6), else `L.SHIPPED[level]`. (v1.7.3 had the shipped value first.) The complete segments are
   for that level. `L.Status()` gives the progress and `etaSec = (need − rateSec) / currentRate`.
 - Display:
   - pet bar: "Unruly 2/6 (gaining)", plus "~N to Submissive" once an estimate exists;
   - `/ptp loyalty`: a report;
   - `/ptp loyalty export`: a copyable text frame (`PetTrainingPlusLoyaltyExport`).
 
-### Status: thresholds (v1.7.3, provisional)
-Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy and rate 20 from level 2 on):
+### Status: thresholds (v1.7.6, provisional; first test)
+Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 2–6; happy and rate 20 from level 2 on):
 
-| Step | Rate-seconds measured | 18,000 × level | Summoned | Fighting | Clock | Notes |
+| Step | Rate-seconds (all time) | 18,000 × level | Summoned | Fighting | Resting | Notes |
 |---|---|---|---|---|---|---|
-| 1 → 2 | 18,850 | 18,000 (+4.7%) | 1,184 s | not counted | 1,482 s | v1.7.0; rate −10 to 20; fights over 20 s dropped |
-| 2 → 3 | 35,800 | 36,000 (−0.6%) | 1,790 s | 336 s | 2,236 s | started on v1.7.0, reload partway |
-| 3 → 4 | 54,100 | 54,000 (+0.2%) | 2,705 s | 1,038 s | 2,762 s | all on v1.7.2 |
-| 4 → 5 | **122,360** | 72,000 (**+70%**) | 6,118 s | 241 s | 6,765 s | v1.7.3; happy and rate 20 throughout; **4% fighting** |
+| 1 → 2 | 18,850 | 18,000 (+4.7%) | 1,184 s | not counted | not tracked | v1.7.0; rate −10 to 20; fights over 20 s dropped |
+| 2 → 3 | 35,800 | 36,000 (−0.6%) | 1,790 s | 336 s | not tracked | started on v1.7.0, reload partway |
+| 3 → 4 | 54,100 | 54,000 (+0.2%) | 2,705 s | 1,038 s | not tracked | v1.7.2 |
+| 4 → 5 | 122,360 | 72,000 (+70%) | 6,118 s | 241 s | not tracked | v1.7.3; Shannon: "a *lot* of time resting"; fits if ~42 min |
+| 5 → 6 | 107,640 | 90,000 (+20%) | 5,382 s | 847 s | **1,072 s** | v1.7.4; **86,200 without resting (−4%)**; 11 h wall clock (overnight logout); 0 XP for you and the pet |
 
-- **The 18,000 × level model (v1.7.3) failed its first prediction.** It fitted levels 1–3, then 4 → 5 took 1.7× the
-  predicted 72,000. The rate and happiness were the same as levels 2–3; what differed was how much fighting there was:
-  19% and 38% of summoned time on the levels that fit, 4% on this one. Working hypothesis: loyalty grows with activity
-  (fighting, experience), not just time summoned. Other candidates: time resting in a city or inn, AFK time, or a curve
-  that simply steepens. v1.7.4 records those signals to tell them apart; the last level (5 → 6) is the first test.
-- Shipped (v1.7.4, provisional): `L.SHIPPED = { 18000, 36000, 54000, 122000 }`, level 5 unknown (no estimate shown).
-  `L.PER_LEVEL = 18000` remains as the old model's constant. One pet, one family, one pet level so far.
-- **Loyalty grows with time, not pet XP**: the pet stayed level 29 for levels 2–4.
-- My earlier guess that 2 → 3 was undercounted (to 37,000–39,000) was wrong: the measured value already matched the line.
-- The level-1 overshoot is probably the noisy start: periods at rate −10 (the game may clamp loyalty at 0, where the
-  recorder subtracts) and level-up detection up to 5 s late.
+- **Model (v1.7.6): level n → n+1 takes 18,000 × n rate-seconds, counting only time not spent resting.** Shipped as
+  `L.SHIPPED[1..5]`. At rate 20: 15, 30, 45, 60 and 75 minutes, 3 h 45 min from tame to Best Friend, plus any resting.
+- How it was reached: 18,000 × level fitted levels 1–3 (v1.7.3), then 4 → 5 missed by 70%. The v1.7.4 activity data
+  for 5 → 6 showed 18 minutes resting; without them that level fits within 4%, and Shannon confirmed the outlier level
+  had a lot of resting.
+- **Ruled out by this data:**
+  - Fighting speeding loyalty up: levels 2 and 3 have very different combat shares and both fit only if a combat
+    second and a quiet second count the same (solving them gives weights 0.98 and 1.01).
+  - Experience driving it: 5 → 6 had no experience gained for you or the pet and still fit.
+  - Logged-out time counting: 5 → 6 spanned 11 hours on the clock.
+  - A curve that simply steepens: 5 → 6 took fewer rate-seconds than 4 → 5.
+- Not yet confirmed: the 4 → 5 resting time (not tracked; from memory), and whether it holds for other families and pet
+  levels. **Next: a second fresh tame, compared level by level against this table.**
+- The v1.7.4 experience tracking recorded 0 for 5 → 6 with 14 minutes of fighting. Unconfirmed whether that was real
+  (grey mobs) or a bug; check `xp` on the next pet.
 - Open: whether loyalty is gained while the pet is dismissed. Compare `wallSec` with `summonedSec` (since v1.7.2, fights are inside `summonedSec`, so the remaining difference is dismissed time, loading screens and deaths).
 - Open: whether rate × time alone fills a level. If complete segments for the same level differ widely between pets,
   look at pet level, happiness time and gaps.
@@ -544,7 +553,7 @@ Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy 
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 201 checks at v1.7.5; all must pass before a push.
+- `lua5.1 tests/run.lua`. 207 checks at v1.7.6; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -587,6 +596,7 @@ Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy 
 | 1.7.3 | Ship loyalty thresholds as 18,000 × level rate-seconds (provisional) | three Hyena levels fit within 0.6% (levels 2–3) and 4.7% (noisy level 1); the pet bar can now predict, and the next levels test it |
 | 1.7.4 | Record activity per level (resting, AFK, mounted, flight, your XP, pet XP); your own measurements beat the shipped table; ship level 4 as measured, level 5 unknown | the 18,000 × level model missed level 4 by 70%, in a stretch with little fighting |
 | 1.7.5 | Remove Cobra Reflexes (commented stub, like Harass) | not available in Forever; the v1.1.1 entry was wrong |
+| 1.7.6 | Resting time (city/inn) no longer counts toward loyalty; ship 18,000 × level for levels 1–5; only segments counted this way feed estimates | 5 → 6 fits within 4% without its resting time; Shannon confirmed lots of resting on the 70% outlier |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
@@ -595,9 +605,8 @@ Shannon's Hyena (fresh tame Nov 22, pet level 29 throughout levels 2–4, happy 
 
 - In-game checks still to report back: the v1.5.0 framed border spacing, v1.5.1 ESC linking, v1.6.x colours and stripes,
   and the v1.7.0 recorder.
-- Loyalty: explain level 4 → 5 (activity or a steeper curve) with the v1.7.4 activity data from Faithful → Best
-  Friend. Then measure a fresh tame again, ideally once fighting steadily and once mostly idle, and another family and
-  pet level.
+- Loyalty: test the v1.7.6 model with Shannon's second fresh tame (Nov 23), level by level; ideally include a long
+  city visit mid-level. Then another family and pet level. Check that `xp` is recorded.
 - The realm part of loyalty run keys is empty in game ("Censuh-#2"): `GetRealmName` returned nothing. Harmless, since
   the key only needs to be unique per character.
 - Data gaps: several ranks have no `lvl`/`tp` in Data.lua. They fill in from Beast Training as the hunter meets them, and
