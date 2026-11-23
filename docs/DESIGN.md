@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.6** · last updated 2026-11-23.
+**Current version: 1.7.7** · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -452,8 +452,11 @@ each level's threshold, then ship those numbers.
   disappears in combat, counting stops. Before v1.7.2 any fight over 20 s was dropped as a gap: Shannon's first Hyena
   segment lost about 5 minutes that way.
 - **Resting doesn't count** (v1.7.6): a step taken while `IsResting()` (city or inn), in or out of combat, adds `dt`
-  to `summonedSec` and `restSec` but nothing to `rateSec`. While resting, `L.Status` gives no ETA and the pet bar reads
-  "(paused: resting)". Runs and segments carry `method` (`L.METHOD = 2`); segments without it were counted the old way
+  to `summonedSec` and `restSec` but nothing to `rateSec`. While resting, `L.Status` gives no ETA, the pet bar reads
+  "(paused: resting)" and `/ptp loyalty` says the estimate is paused.
+- **Display updates:** `L.Sample` ends by redrawing the pet bar (`UI.RefreshPet`), so the countdown moves every 5 s.
+  `PLAYER_UPDATE_RESTING` triggers a sample at once (v1.7.7), so the pause shows the moment you enter or leave a city
+  or inn rather than up to 5 s later. Runs and segments carry `method` (`L.METHOD = 2`); segments without it were counted the old way
   (all summoned time) and are not used for estimates.
 - **Activity** (v1.7.4, `trackActivity`): every counted step also adds `dt` to `afkSec`
   (`UnitIsAFK`), `mountSec` (`IsMounted`) and `taxiSec` (`UnitOnTaxi`). It also adds your experience gained (`UnitXP`,
@@ -553,7 +556,7 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 207 checks at v1.7.6; all must pass before a push.
+- `lua5.1 tests/run.lua`. 210 checks at v1.7.7; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -597,6 +600,7 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 | 1.7.4 | Record activity per level (resting, AFK, mounted, flight, your XP, pet XP); your own measurements beat the shipped table; ship level 4 as measured, level 5 unknown | the 18,000 × level model missed level 4 by 70%, in a stretch with little fighting |
 | 1.7.5 | Remove Cobra Reflexes (commented stub, like Harass) | not available in Forever; the v1.1.1 entry was wrong |
 | 1.7.6 | Resting time (city/inn) no longer counts toward loyalty; ship 18,000 × level for levels 1–5; only segments counted this way feed estimates | 5 → 6 fits within 4% without its resting time; Shannon confirmed lots of resting on the 70% outlier |
+| 1.7.7 | Sample loyalty on `PLAYER_UPDATE_RESTING` | the pause already worked (v1.7.6) but showed up to 5 s late; Shannon asked for the estimate to pause while resting |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---

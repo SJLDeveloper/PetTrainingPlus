@@ -608,6 +608,9 @@ SlashCmdList.PETTRAININGPLUS("loyalty")
 check(M.prints[#M.prints]:find("level%-ups recorded"), "/ptp loyalty prints a report")
 ns.UI.Show(); ns.UI.Refresh()
 check(ns.UI.frame.petbar.info:GetText():find("Unruly") and ns.UI.frame.petbar.info:GetText():find("to Submissive"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
+local before = ns.UI.frame.petbar.info:GetText()
+M.advance(180)
+check(ns.UI.frame.petbar.info:GetText() ~= before, "pet bar countdown moves on its own: " .. ns.UI.frame.petbar.info:GetText())
 -- 1.7.2: time in combat counts, at the rate seen before the fight
 M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
 M.fire("UNIT_PET", "player"); M.advance(8)
@@ -659,14 +662,18 @@ UnitOnTaxi = function() return false end
 M.advance(6)
 local x0 = arun.xp or 0
 local r0, s0 = arun.rateSec, arun.summonedSec
-M.resting = true; M.advance(30)
-check(LY.Status().resting and LY.Status().etaSec == nil, "resting: no ETA (paused)")
 ns.UI.Show(); ns.UI.Refresh(); M.advance(0.3)
-check(ns.UI.frame.petbar.info:GetText():find("paused: resting"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
+check(not ns.UI.frame.petbar.info:GetText():find("paused"), "pet bar: not resting yet")
+M.resting = true; M.fire("PLAYER_UPDATE_RESTING"); M.advance(0.5)
+check(ns.UI.frame.petbar.info:GetText():find("paused: resting"), "pet bar updates on entering an inn, no other refresh: " .. ns.UI.frame.petbar.info:GetText())
+M.advance(30)
+check(LY.Status().resting and LY.Status().etaSec == nil, "resting: no ETA (paused)")
 M.advance(30); M.resting = false
 check(math.abs(arun.rateSec - r0) < 1 and arun.summonedSec - s0 >= 55, "resting: summoned time counts, loyalty doesn't (v1.7.6)")
 M.combat = true; M.resting = true; M.advance(20); M.combat = false; M.resting = false; M.advance(1)
 check(math.abs(arun.rateSec - r0) < 1 + 20 * 2, "resting in combat doesn't build loyalty either")
+M.fire("PLAYER_UPDATE_RESTING"); M.advance(0.5)
+check(not ns.UI.frame.petbar.info:GetText():find("paused"), "pet bar updates on leaving the inn")
 M.advance(10)
 check(arun.rateSec - r0 > 150, "out of the inn: loyalty counts again")
 check(arun.restSec >= 75 and arun.restSec <= 85, "resting time counted (" .. arun.restSec .. " s)")

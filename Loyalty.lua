@@ -362,3 +362,6 @@ end
 
 ns.On("PLAYER_LOGIN", function() ns.After(SAMPLE, loop) end)
 ns.On("UNIT_HAPPINESS", function() ns.Debounce("loyaltySample", 0.5, function() pcall(L.Sample) end) end)
+-- Each sample redraws the pet bar (end of L.Sample), so its countdown moves every 5 s and pauses while resting. On
+-- entering or leaving a city or inn, sample at once (v1.7.7) so "(paused: resting)" shows without waiting.
+ns.On("PLAYER_UPDATE_RESTING", function() ns.Debounce("loyaltySample", 0.2, function() pcall(L.Sample) end) end)
