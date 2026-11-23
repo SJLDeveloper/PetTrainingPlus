@@ -455,7 +455,7 @@ each level's threshold, then ship those numbers.
   new tame with the same default name and family). The run starts over, marked not complete (v1.7.2). This was seen in
   game: a Carrion Bird run went from pet level 10 to 7. Each step adds `dt` to `summonedSec` and
   `lastRate × dt` to `rateSec`, and tracks `happySec[1..3]`, rate min/max, and gaps.
-- When the level goes up by one, the run is closed as a **segment**: `{from, to, complete, rateSec, summonedSec, wallSec, combatSec,
+- When the level goes up by one, the run is closed as a **segment**: `{from, to, complete, rateSec, summonedSec, wallSec,
   combatSec, samples, gaps, rateMin, rateMax, happySec, petLevelStart, petLevelEnd, family, petName, ended}`, and a chat line is
   printed. Any other change (a drop, a jump) goes to `events`.
 - **`complete` is true only if the level was watched from its start**: a fresh tame (`L.OnTamed`, within 120 s), or a
