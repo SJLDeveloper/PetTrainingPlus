@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.8.1** · last updated 2026-11-23.
+**Current version: 1.8.1** (first public release, tagged `v1.8.1`) · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -38,6 +38,7 @@ Owner: Shannon (GitHub `SJLDeveloper`). Repo: public, https://github.com/SJLDeve
 | `docs/DESIGN.md` | This document (not shipped in the release zip) |
 | `CLAUDE.md` | Standing instructions for Claude sessions working on this repo (not shipped) |
 | `README.md`, `LICENSE` | User-facing description and credits; MIT plus data credits |
+| `CHANGELOG.md` | Release notes per public version (not shipped; pasted into CurseForge) |
 
 Load order (toc): Data, Core, Trainer, Bestiary, Loyalty, UI. Every file shares the addon namespace `ns`. The modules
 are `ns.T` (Trainer), `ns.B` (Bestiary), `ns.Loyalty`, and `ns.UI`.
@@ -61,6 +62,15 @@ are `ns.T` (Trainer), `ns.B` (Bestiary), `ns.Loyalty`, and `ns.UI`.
 6. Copy the addon files to AddOns.
 7. Build `PetTrainingPlus-<version>.zip` in the device clone. The zip is git-ignored. It holds the toc, the six `.lua`
    files, README and LICENSE inside a `PetTrainingPlus/` folder; no tests, no docs. Delete the previous zip.
+
+**Public releases** (from v1.8.1):
+- Tag the release commit `vX.Y.Z` and create a GitHub release with the zip attached (REST API: GraphQL is not
+  available from Claude sessions, so `gh release` doesn't work; use `gh api repos/SJLDeveloper/PetTrainingPlus/releases`
+  and upload the asset to `uploads.github.com`).
+- Build the release zip from the tagged commit (`git archive`), so it matches the tag exactly.
+- Add the version's notes to `CHANGELOG.md`; that text goes in CurseForge's changelog field.
+- Shannon uploads the zip to CurseForge.
+- A commit that changes only docs or release notes doesn't change the addon, so it keeps the version.
 
 Device-side git needs delete permission on the Projects folder, asked for once per session. Without it, pulls leave lock
 files and half-replaced files behind; after granting it, `git reset --hard origin/main` fixes that.
@@ -642,6 +652,7 @@ Second pet, Shannon's Wind Serpent (fresh tame Nov 23, pet level 25–26, v1.8.0
 | 1.7.7 | Sample loyalty on `PLAYER_UPDATE_RESTING` | the pause already worked (v1.7.6) but showed up to 5 s late; Shannon asked for the estimate to pause while resting |
 | 1.8.0 | Loyalty countdown as a bar centred on the pet line, filling behind its text; gold "Loyalty Increase Imminent!" in the last 5 s; hidden at Best Friend | Shannon's request, ahead of a possible release |
 | 1.8.1 | No pet record during a tame; retire records whose GUID a new tame takes over | a new "Cat" was filed under an old "Cat": no origin, no level-1 meter |
+| 1.8.1 | **First public release** (CurseForge), shipped as tested; level-1 loyalty estimate left at 18,000 shipped | Shannon: ship now, refine later. Level 1 varies (14,060–17,005 on clean tames), noted as a known limitation |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
@@ -654,8 +665,10 @@ Second pet, Shannon's Wind Serpent (fresh tame Nov 23, pet level 25–26, v1.8.0
   and the v1.7.0 recorder.
 - Loyalty: settle level 1 with a third fresh tame (levels 1–3), fed right after taming; then a full run to Best
   Friend again. `xp` tracking confirmed working (Wind Serpent).
-- Confirm in game that a new tame with the same name as an old pet now gets its own record and a level-1 meter
-  (v1.8.1), and whether Forever really reuses pet GUID tails.
+- Confirmed in game (Nov 23): a new tame with an old pet's name gets its own record and a level-1 meter. Pet records
+  show the same GUID tail on several different pets, so Forever does reuse them.
+- Loyalty level 1: Hyena #2 (fresh, clean, pet level 27) took **17,005** rate-seconds vs the Wind Serpent's 14,060. Level 1
+  varies; consider shipping ~15,500 (their average) in place of 18,000 in the next version.
 - The realm part of loyalty run keys is empty in game ("Censuh-#2"): `GetRealmName` returned nothing. Harmless, since
   the key only needs to be unique per character.
 - Data gaps: several ranks have no `lvl`/`tp` in Data.lua. They fill in from Beast Training as the hunter meets them, and

@@ -13,6 +13,10 @@ taints Train, what can't be drawn), and a log of decisions and failed approaches
    to `_forever_/Interface/AddOns/PetTrainingPlus`, and rebuild `PetTrainingPlus-<version>.zip` (addon files only, in a
    `PetTrainingPlus/` folder; no tests or docs). Delete the old zip.
 
+## Public releases
+See DESIGN.md §2: tag `vX.Y.Z`, GitHub release with the zip built from the tag (REST API only), notes in
+`CHANGELOG.md`. Shannon uploads to CurseForge.
+
 ## Rules
 - This repo holds this project only. Never add other projects to it.
 - Don't touch Blizzard's Beast Training window (alpha, strata, size, scroll, selection). See DESIGN.md §3.
