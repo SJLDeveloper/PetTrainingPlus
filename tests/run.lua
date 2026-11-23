@@ -732,5 +732,49 @@ check(ns.UI.frame.petbar.info:GetText():find("Best Friend|r 6/6", 1, true) and n
 -- no pet: no bar
 M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(2); ns.UI.Refresh(); M.advance(0.5)
 check(not ns.UI.frame.petbar.loy:IsShown(), "no pet: no loyalty bar")
+-- 1.8.1: a fresh tame with the same default name as an old pet ("Cat"), which may also get the old pet's GUID
+M.units.pet = { name = "Cat", level = 15, guid = "Pet-0-1-2-3-165189-0400C5", fam = 2, famName = "Cat" }
+M.petSpells = {}
+M.loyalty = { name = "Unruly", happiness = 3, damage = 125, rate = 20 }
+M.fire("UNIT_PET", "player"); M.advance(2)
+local oldCat = ns.pet.rec
+check(oldCat and oldCat.name == "Cat" and not oldCat.origin, "an old pet named Cat, no origin")
+M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(8) -- abandoned
+M.units.target = { name = "Feral Mountain Lion", level = 27, guid = "Creature-0-1-2-3-2385-000DEF", fam = 2, famName = "Cat" }
+M.loyalty = { name = "Rebellious", happiness = 3, damage = 125, rate = 20 }
+M.fire("UNIT_SPELLCAST_CHANNEL_START", "player", "x", 1515)
+M.advance(20)
+M.fire("UNIT_SPELLCAST_CHANNEL_STOP", "player", "x", 1515)
+M.units.pet = { name = "Cat", level = 27, guid = "Pet-0-1-2-3-165189-0400C5", fam = 2, famName = "Cat" } -- same GUID
+M.fire("PET_BAR_UPDATE"); M.fire("SPELLS_CHANGED") -- the game reads the new pet before the tame is finished
+M.fire("UNIT_PET", "player"); M.advance(0.1); M.fire("UNIT_PET", "player")
+M.advance(0.8); LY.Sample() -- a loyalty sample before the tame is recorded (as can happen in game)
+M.advance(6)
+local newCat = ns.pet.rec
+check(newCat and newCat ~= oldCat and newCat.origin and newCat.origin.npc == 2385, "new Cat gets its own record with its origin")
+check(oldCat.retired, "the old Cat's record is retired (same GUID)")
+M.advance(6)
+st = LY.Status()
+check(st and st.level == 1 and st.fromStart, "new Cat: loyalty measured from the tame")
+ns.UI.Refresh(); M.advance(0.5)
+check(ns.UI.frame.petbar.loy.state == "gaining", "new Cat: the loyalty meter shows for level 1 (" .. tostring(ns.UI.frame.petbar.loy.state) .. ")")
+check(not ns.UI.frame.petbar.origin:GetText():find("Origin unknown"), "new Cat: origin shown")
+-- dismiss and summon again: still the new Cat
+M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(2)
+M.units.pet = { name = "Cat", level = 27, guid = "Pet-0-1-2-3-165189-0400C5", fam = 2, famName = "Cat" }
+M.fire("UNIT_PET", "player"); M.advance(2)
+check(ns.pet.rec == newCat, "summoned again: the new Cat's record")
+-- a stabled pet with the same name but its own GUID still finds its own record
+local other = ns.NewPetRecord("Cat", 2, "0400D9"); other.lastSeen = 1
+M.units.pet = { name = "Cat", level = 20, guid = "Pet-0-1-2-3-165189-0400D9", fam = 2, famName = "Cat" }
+M.fire("UNIT_PET", "player"); M.advance(2)
+check(ns.pet.rec == other, "another Cat with its own GUID keeps its own record")
+-- a tame channel that never reports its end: the flag expires, and pets get records again
+M.units.target = { name = "Feral Mountain Lion", level = 27, guid = "Creature-0-1-2-3-2385-000DE0", fam = 2, famName = "Cat" }
+M.fire("UNIT_SPELLCAST_CHANNEL_START", "player", "x", 1515)
+M.advance(70)
+M.units.pet = { name = "Whiskers", level = 22, guid = "Pet-0-1-2-3-165189-0400E1", fam = 2, famName = "Cat" }
+M.fire("UNIT_PET", "player"); M.advance(2)
+check(ns.pet.rec and ns.pet.rec.name == "Whiskers", "a stuck tame flag expires after a minute")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

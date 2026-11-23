@@ -307,10 +307,11 @@ end
 ns.FamFromUnit = famFromUnit
 
 -- The record of a pet: the one with its name and family; the GUID tail breaks ties and follows renames.
+-- Retired records (v1.8.1: an older pet whose GUID a new tame took over) are never matched.
 function ns.FindPetRecord(name, fam, gk)
   local best
   for _, p in pairs(ns.char.pets) do
-    if p.name == name and (not fam or not p.fam or p.fam == fam) then
+    if not p.retired and p.name == name and (not fam or not p.fam or p.fam == fam) then
       if gk and p.guid == gk then return p end
       if not best or (p.lastSeen or 0) > (best.lastSeen or 0) then best = p end
     end
@@ -318,7 +319,7 @@ function ns.FindPetRecord(name, fam, gk)
   if best then return best end
   if gk then
     for _, p in pairs(ns.char.pets) do
-      if p.guid == gk and p.fam == fam then return p end
+      if not p.retired and p.guid == gk and p.fam == fam then return p end
     end
   end
   return nil
@@ -356,15 +357,18 @@ function ns.ReadPet()
     ns.db.famCan[fam] = ns.db.famCan[fam] or {}
     for key in pairs(ranks) do ns.db.famCan[fam][key] = true end
   end
-  if type(name) == "string" and name ~= "" then
+  -- during a tame the new pet has no record yet: don't lend it an old one with the same name (v1.8.1), or the loyalty
+  -- recorder would start measuring under the old pet before the tame is recorded
+  local taming = ns.tameInProgress and GetTime() - ns.tameInProgress < 60 -- a stuck flag expires after a minute
+  if type(name) == "string" and name ~= "" and not taming then
     local rec = ns.FindPetRecord(name, fam, gk)
     if not rec and gk then
       -- renamed? same slot and family, but a name we have never seen
       for _, q in pairs(ns.char.pets) do
-        if q.guid == gk and q.fam == fam and q.name ~= name then rec = q; rec.name = name; break end
+        if not q.retired and q.guid == gk and q.fam == fam and q.name ~= name then rec = q; rec.name = name; break end
       end
     end
-    if not rec and not ns.tameInProgress then rec = ns.NewPetRecord(name, fam, gk) end
+    if not rec then rec = ns.NewPetRecord(name, fam, gk) end
     if rec then
       rec.lastSeen, rec.guid, rec.fam, rec.level = time(), gk or rec.guid, fam or rec.fam, level or rec.level
       p.rec = rec
@@ -599,7 +603,7 @@ function ns.OnTameStart(spellID)
     clock = GetTime(), t = time(), npc = npc, name = try(UnitName, "target"), level = try(UnitLevel, "target"),
     fam = fam, famName = famName, cls = try(UnitClassification, "target"), where = ns.Where(),
   }
-  ns.tameInProgress = true
+  ns.tameInProgress = GetTime()
 end
 
 function ns.OnTameStop(spellID)
@@ -623,7 +627,14 @@ local function finishTame(tm)
   local origin = {
     npc = tm.npc, name = tm.name, level = tm.level, fam = tm.fam, cls = tm.cls, where = tm.where, t = tm.t, teaches = ranks,
   }
-  local rec = ns.NewPetRecord(name, fam, petGuidKey())
+  -- Forever can give a new pet the GUID of one you abandoned: retire the old record so it isn't matched again (v1.8.1)
+  local gk = petGuidKey()
+  if gk then
+    for _, q in pairs(ns.char.pets) do
+      if q.guid == gk and not q.retired then q.retired = time() end
+    end
+  end
+  local rec = ns.NewPetRecord(name, fam, gk)
   rec.origin = origin
   if ns.Loyalty then ns.Loyalty.OnTamed() end -- its first loyalty level is measured from the start
   local cr = ns.db.creatures[tm.npc] or {}

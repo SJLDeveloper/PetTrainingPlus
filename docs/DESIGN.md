@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.8.0** · last updated 2026-11-23.
+**Current version: 1.8.1** · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -411,6 +411,14 @@ The pet GUID never carries the creature ID, so the origin is captured from the *
   - calls `ns.Loyalty.OnTamed()`;
   - prints what the pet knows.
 - `/ptp origin` sets the origin of a pet tamed before the addon was installed, from a targeted beast of the same kind.
+- **Same-name pets** (v1.8.1). A new tame often has the same default name and family as an older pet ("Cat"):
+  - While a tame is in progress (`ns.tameInProgress`, a `GetTime()` stamp that expires after 60 s), `ns.ReadPet`
+    attaches **no** record. Before v1.8.1 it found the old "Cat" by name, and the loyalty recorder started measuring
+    under the old pet before `finishTame` ran: no origin, and no meter for level 1 (Shannon's level-27 Cat, Nov 23;
+    probably also the Nov 22 Carrion Bird whose level went 10 → 7).
+  - `finishTame` sets `retired` on any older record with the new pet's GUID tail, since Forever is suspected of reusing
+    them after an abandon. `ns.FindPetRecord` and the rename lookup skip retired records.
+  - A different pet with the same name but its own GUID (one in the stable) still matches its own record.
 
 ---
 
@@ -494,6 +502,19 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 | 4 → 5 | 122,360 | 72,000 (+70%) | 6,118 s | 241 s | not tracked | v1.7.3; Shannon: "a *lot* of time resting"; fits if ~42 min |
 | 5 → 6 | 107,640 | 90,000 (+20%) | 5,382 s | 847 s | **1,072 s** | v1.7.4; **86,200 without resting (−4%)**; 11 h wall clock (overnight logout); 0 XP for you and the pet |
 
+Second pet, Shannon's Wind Serpent (fresh tame Nov 23, pet level 25–26, v1.8.0):
+
+| Step | Rate-seconds | 18,000 × level | Summoned | Fighting | Pet XP | Notes |
+|---|---|---|---|---|---|---|
+| 1 → 2 | **14,060** | 18,000 (−22%) | 760 s | 203 s | 2,347 | clean; 37 s unhappy at rate −10 at the start |
+| 2 → 3 | **35,860** | 36,000 (−0.4%) | 1,793 s | 778 s | 9,551 | the bar's countdown hit within a second (Shannon) |
+
+- 2 → 3 matched both the model and the Hyena (35,800). That rules out pet level (25 vs 29) and pet experience (9,551
+  vs 0) as factors, which the 1 → 2 result had briefly suggested.
+- **Level 1 is the open question:** 14,060 (Wind Serpent, clean) vs 18,850 (Hyena, weak: old code dropped fights, and
+  it went unfed early). Shannon's read: the first level is faster. A third fresh tame will test 1 → 3. Until then,
+  your own complete level-1 measurement (method 2) drives the estimate (`L.Needed`), so 14,060 is used.
+
 - **Model (v1.7.6): level n → n+1 takes 18,000 × n rate-seconds, counting only time not spent resting.** Shipped as
   `L.SHIPPED[1..5]`. At rate 20: 15, 30, 45, 60 and 75 minutes, 3 h 45 min from tame to Best Friend, plus any resting.
 - How it was reached: 18,000 × level fitted levels 1–3 (v1.7.3), then 4 → 5 missed by 70%. The v1.7.4 activity data
@@ -573,7 +594,7 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 221 checks at v1.8.0; all must pass before a push.
+- `lua5.1 tests/run.lua`. 230 checks at v1.8.1; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -620,6 +641,7 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 | 1.7.6 | Resting time (city/inn) no longer counts toward loyalty; ship 18,000 × level for levels 1–5; only segments counted this way feed estimates | 5 → 6 fits within 4% without its resting time; Shannon confirmed lots of resting on the 70% outlier |
 | 1.7.7 | Sample loyalty on `PLAYER_UPDATE_RESTING` | the pause already worked (v1.7.6) but showed up to 5 s late; Shannon asked for the estimate to pause while resting |
 | 1.8.0 | Loyalty countdown as a bar centred on the pet line, filling behind its text; gold "Loyalty Increase Imminent!" in the last 5 s; hidden at Best Friend | Shannon's request, ahead of a possible release |
+| 1.8.1 | No pet record during a tame; retire records whose GUID a new tame takes over | a new "Cat" was filed under an old "Cat": no origin, no level-1 meter |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
@@ -630,8 +652,10 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
   name, and how the gold state reads.
 - In-game checks still to report back: the v1.5.0 framed border spacing, v1.5.1 ESC linking, v1.6.x colours and stripes,
   and the v1.7.0 recorder.
-- Loyalty: test the v1.7.6 model with Shannon's second fresh tame (Nov 23), level by level; ideally include a long
-  city visit mid-level. Then another family and pet level. Check that `xp` is recorded.
+- Loyalty: settle level 1 with a third fresh tame (levels 1–3), fed right after taming; then a full run to Best
+  Friend again. `xp` tracking confirmed working (Wind Serpent).
+- Confirm in game that a new tame with the same name as an old pet now gets its own record and a level-1 meter
+  (v1.8.1), and whether Forever really reuses pet GUID tails.
 - The realm part of loyalty run keys is empty in game ("Censuh-#2"): `GetRealmName` returned nothing. Harmless, since
   the key only needs to be unique per character.
 - Data gaps: several ranks have no `lvl`/`tp` in Data.lua. They fill in from Beast Training as the hunter meets them, and
