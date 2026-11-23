@@ -601,5 +601,42 @@ SlashCmdList.PETTRAININGPLUS("loyalty")
 check(M.prints[#M.prints]:find("level%-ups recorded"), "/ptp loyalty prints a report")
 ns.UI.Show(); ns.UI.Refresh()
 check(ns.UI.frame.petbar.info:GetText():find("Unruly") and ns.UI.frame.petbar.info:GetText():find("to Submissive"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
+-- 1.7.2: time in combat counts, at the rate seen before the fight
+M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.fire("UNIT_PET", "player"); M.advance(8)
+local c0 = LY.Status()
+M.combat = true
+M.advance(90) -- a 90-second fight
+M.combat = false
+M.advance(6)
+local c1 = LY.Status()
+check(c1.summonedSec - c0.summonedSec >= 90 and c1.summonedSec - c0.summonedSec <= 100,
+  "a 90 s fight is counted (" .. (c1.summonedSec - c0.summonedSec) .. " s)")
+check(math.abs((c1.rateSec - c0.rateSec) - 20 * (c1.summonedSec - c0.summonedSec)) < 1, "fight time counted at the last rate")
+local runNow = ns.db.loyalty.current[next(ns.db.loyalty.current) and (function()
+  for k, r in pairs(ns.db.loyalty.current) do if r.petName == "Gray Bear" then return k end end end)()]
+check(runNow and runNow.combatSec >= 90, "combat time kept separately (" .. tostring(runNow and runNow.combatSec) .. ")")
+-- two samples in the same second are not a gap
+local g0 = runNow.gaps or 0
+M.fire("UNIT_HAPPINESS", "pet"); M.advance(0.6); M.fire("UNIT_HAPPINESS", "pet"); M.advance(0.6)
+check((runNow.gaps or 0) == g0, "same-second samples are not gaps")
+-- the pet dies in combat: time stops counting
+M.combat = true
+M.advance(10)
+local dead = LY.Status().summonedSec
+M.units.pet = nil
+M.advance(60)
+M.combat = false
+M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.fire("UNIT_PET", "player"); M.advance(8)
+check(LY.Status().summonedSec - dead < 20, "time after the pet is gone in combat is not counted")
+-- a new pet matched to an old record (its level is lower): the run starts over
+local key = (function() for k, r in pairs(ns.db.loyalty.current) do if r.petName == "Gray Bear" then return k end end end)()
+local oldSum = ns.db.loyalty.current[key].summonedSec
+M.units.pet = { name = "Gray Bear", level = 12, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.fire("UNIT_PET", "player"); M.advance(8)
+local fresh = ns.db.loyalty.current[key]
+check(fresh.summonedSec < oldSum and fresh.petLevelStart == 12 and not fresh.fromStart, "lower pet level: a new run, not complete")
+check(LY.ExportText():find("combat="), "export shows combat time")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

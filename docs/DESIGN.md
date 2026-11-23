@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.1** · last updated 2026-11-22.
+**Current version: 1.7.2** · last updated 2026-11-22.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -443,12 +443,20 @@ The pet GUID never carries the creature ID, so the origin is captured from the *
 ### The recorder (the "trap")
 Shannon's plan: tame a fresh pet, level its loyalty to the top, and use the recorded loyalty rate × time to approximate
 each level's threshold, then ship those numbers.
-- A sample is taken every 5 s from `PLAYER_LOGIN`, and on `UNIT_HAPPINESS`. Nothing is sampled in combat.
+- A sample is taken every 5 s from `PLAYER_LOGIN`, and on `UNIT_HAPPINESS`.
+- **In combat** nothing can be read (secret values), but the time still counts (v1.7.2, `L.SampleCombat`): while the pet
+  exists, each step adds `dt` at the last rate seen before the fight, and also adds it to `combatSec`. If the pet
+  disappears in combat, counting stops. Before v1.7.2 any fight over 20 s was dropped as a gap: Shannon's first Hyena
+  segment lost about 5 minutes that way.
 - Runs are kept per pet in `db.loyalty.current["<player>-<realm>#<recId>"]`.
-- Time counts only while sampling is continuous (same pet, gap ≤ 20 s). Each step adds `dt` to `summonedSec` and
+- Time counts only while sampling is continuous (same pet, gap ≤ 20 s). Two samples in the same second (the loop and
+  `UNIT_HAPPINESS`) are not a gap (v1.7.2; this used to inflate `gaps`).
+- If the summoned pet's level is lower than the run's last pet level, it's a different pet matched to an old record (a
+  new tame with the same default name and family). The run starts over, marked not complete (v1.7.2). This was seen in
+  game: a Carrion Bird run went from pet level 10 to 7. Each step adds `dt` to `summonedSec` and
   `lastRate × dt` to `rateSec`, and tracks `happySec[1..3]`, rate min/max, and gaps.
-- When the level goes up by one, the run is closed as a **segment**: `{from, to, complete, rateSec, summonedSec, wallSec,
-  samples, gaps, rateMin, rateMax, happySec, petLevelStart, petLevelEnd, family, petName, ended}`, and a chat line is
+- When the level goes up by one, the run is closed as a **segment**: `{from, to, complete, rateSec, summonedSec, wallSec, combatSec,
+  combatSec, samples, gaps, rateMin, rateMax, happySec, petLevelStart, petLevelEnd, family, petName, ended}`, and a chat line is
   printed. Any other change (a drop, a jump) goes to `events`.
 - **`complete` is true only if the level was watched from its start**: a fresh tame (`L.OnTamed`, within 120 s), or a
   run opened by the previous level-up. Pets already partway through a level give partial segments, which aren't used for
@@ -462,10 +470,14 @@ each level's threshold, then ship those numbers.
 
 ### Status
 - `L.SHIPPED = {}`. The thresholds will be filled in from Shannon's recording, started Nov 22.
-- Open: whether loyalty is gained while the pet is dismissed. Compare `wallSec` with `summonedSec`.
+- **First measurement** (Nov 22, v1.7.0, pet level 27–29 Hyena, fresh tame): Rebellious → Unruly took **18,850
+  rate-seconds** over 1,184 s summoned and 1,482 s wall clock. Rate ranged −10 to 20 (unhappy for about 107 s, content
+  for 106 s, happy for 970 s). The 298 s between wall time and summoned time was mostly fights dropped by the v1.7.0
+  combat gap, so the true value is likely between 18,850 and about 24,800 (if those 298 s ran at rate 20). Don't ship it;
+  re-measure level 1 with a fresh tame on v1.7.2 or later.
+- Open: whether loyalty is gained while the pet is dismissed. Compare `wallSec` with `summonedSec` (since v1.7.2, fights are inside `summonedSec`, so the remaining difference is dismissed time, loading screens and deaths).
 - Open: whether rate × time alone fills a level. If complete segments for the same level differ widely between pets,
   look at pet level, happiness time and gaps.
-- On Nov 22 the saved data still had no `loyalty` section. The game hadn't reloaded since 1.7.0 was installed.
 
 ---
 
@@ -510,7 +522,7 @@ each level's threshold, then ship those numbers.
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 184 checks at v1.7.1; all must pass before a push.
+- `lua5.1 tests/run.lua`. 190 checks at v1.7.2; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
@@ -549,6 +561,7 @@ each level's threshold, then ship those numbers.
 | 1.7.0 | Show loyalty level and direction; record rate × time per level; ship thresholds later | points aren't exposed; Shannon's "trap" |
 | 1.7.0 | TP = pet level × loyalty level | Shannon's numbers (22 × 2 = 44) |
 | 1.7.1 | Added this design doc and `CLAUDE.md`; the doc is updated on every push. Fixed stale README/help text from before v1.5 | keep the logic written down for future changes |
+| 1.7.2 | Loyalty recorder counts combat time at the last rate; same-second samples aren't gaps; a lower pet level restarts the run | first in-game segment lost ~5 min of fights; a Carrion Bird record mix-up |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
@@ -557,7 +570,10 @@ each level's threshold, then ship those numbers.
 
 - In-game checks still to report back: the v1.5.0 framed border spacing, v1.5.1 ESC linking, v1.6.x colours and stripes,
   and the v1.7.0 recorder.
-- Fill `L.SHIPPED` from the loyalty recording, add tests for it, and release.
+- Fill `L.SHIPPED` from the loyalty recording (v1.7.2+ segments only), add tests for it, and release. Level 1 needs
+  re-measuring.
+- The realm part of loyalty run keys is empty in game ("Censuh-#2"): `GetRealmName` returned nothing. Harmless, since
+  the key only needs to be unique per character.
 - Data gaps: several ranks have no `lvl`/`tp` in Data.lua. They fill in from Beast Training as the hunter meets them, and
   `CanObtain` stays nil (no blue) until then.
 

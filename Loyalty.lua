@@ -78,7 +78,7 @@ local function newRun(read, fromStart)
     started = time(), lastSample = time(), summonedSec = 0, rateSec = 0, samples = 0,
     rateMin = read.rate, rateMax = read.rate, lastRate = read.rate,
     happySec = { 0, 0, 0 }, petLevelStart = ns.pet and ns.pet.level, family = ns.pet and ns.pet.fam,
-    petName = ns.pet and ns.pet.name,
+    petName = ns.pet and ns.pet.name, combatSec = 0,
   }
 end
 
@@ -87,14 +87,42 @@ function L.OnTamed()
   L.freshTame = time()
 end
 
+-- In combat the game's values are secret, so nothing can be read. Time in combat still counts (v1.7.2): the pet is out
+-- and loyalty keeps moving, so the time is added at the last rate seen before the fight.
+function L.SampleCombat()
+  local key = L.lastKey
+  local d = ns.db.loyalty
+  local run = key and d and d.current[key]
+  if not run then return end
+  if not (UnitExists and clean(UnitExists("pet"))) then L.lastKey = nil; return end
+  local now = time()
+  local dt = now - (run.lastSample or now)
+  if dt <= 0 then return end
+  if dt <= SAMPLE * 4 then
+    local rate = run.lastRate or 0
+    run.summonedSec = run.summonedSec + dt
+    run.rateSec = run.rateSec + rate * dt
+    run.combatSec = (run.combatSec or 0) + dt
+    run.samples = run.samples + 1
+  else
+    run.gaps = (run.gaps or 0) + 1
+  end
+  run.lastSample = now
+end
+
 function L.Sample()
-  if not ns.db or ns.InCombat() then return end
+  if not ns.db then return end
+  if ns.InCombat() then L.SampleCombat(); return end
   local read = L.Read()
   local key = petKey()
   if not (read and key) then L.lastKey = nil; return end
   local d = db()
   local run = d.current[key]
   local now = time()
+  -- a different pet under the same record (a new tame with the same name and family matched to an old record shows
+  -- up as the pet's level going down): start over (v1.7.2)
+  local pet = ns.pet
+  if run and pet and run.petLevelEnd and pet.level and pet.level < run.petLevelEnd then run = nil end
   if not run or not run.level then
     -- first sight of this pet: a fresh tame starts at the beginning of its level, otherwise we join halfway
     local fresh = L.freshTame and now - L.freshTame < 120
@@ -105,6 +133,7 @@ function L.Sample()
   end
   -- time since the last sample counts only while this pet was out the whole time (continuous sampling)
   local dt = now - (run.lastSample or now)
+  if dt == 0 and L.lastKey == key then dt = -1 end -- a second sample in the same second: nothing to add, not a gap
   local continuous = L.lastKey == key and dt > 0 and dt <= SAMPLE * 4
   if continuous then
     local rate = run.lastRate or read.rate or 0
@@ -114,7 +143,7 @@ function L.Sample()
     if run.lastHappiness and run.happySec[run.lastHappiness] then
       run.happySec[run.lastHappiness] = run.happySec[run.lastHappiness] + dt
     end
-  else
+  elseif dt ~= -1 then
     run.gaps = (run.gaps or 0) + 1
   end
   run.lastSample = now
@@ -134,7 +163,7 @@ function L.Sample()
         rateSec = math.floor(run.rateSec + 0.5), samples = run.samples, gaps = run.gaps or 0,
         rateMin = run.rateMin, rateMax = run.rateMax, happySec = run.happySec,
         petLevelStart = run.petLevelStart, petLevelEnd = run.petLevelEnd, family = run.family, petName = run.petName,
-        wallSec = now - run.started, ended = now,
+        wallSec = now - run.started, ended = now, combatSec = run.combatSec or 0,
       })
       ns.Print(("Loyalty: %s is now |cffffd100%s|r (%d/%d)."):format(run.petName or "your pet",
         L.NAMES[read.level] or tostring(read.name), read.level, L.MAX))
@@ -211,8 +240,8 @@ function L.ExportText()
   local lines = { "PetTrainingPlus loyalty v1 " .. date("%Y-%m-%d %H:%M") }
   for _, s in ipairs(d.segments or {}) do
     local h = s.happySec or {}
-    lines[#lines + 1] = ("seg %d>%d complete=%s rateSec=%d summoned=%d wall=%d samples=%d gaps=%d rate=%s-%s happy=%d/%d/%d petLv=%s-%s fam=%s pet=%s"):format(
-      s.from, s.to, tostring(s.complete), s.rateSec or 0, s.summonedSec or 0, s.wallSec or 0, s.samples or 0, s.gaps or 0,
+    lines[#lines + 1] = ("seg %d>%d complete=%s rateSec=%d summoned=%d wall=%d combat=%d samples=%d gaps=%d rate=%s-%s happy=%d/%d/%d petLv=%s-%s fam=%s pet=%s"):format(
+      s.from, s.to, tostring(s.complete), s.rateSec or 0, s.summonedSec or 0, s.wallSec or 0, s.combatSec or 0, s.samples or 0, s.gaps or 0,
       tostring(s.rateMin), tostring(s.rateMax), h[1] or 0, h[2] or 0, h[3] or 0, tostring(s.petLevelStart),
       tostring(s.petLevelEnd), tostring(s.family), tostring(s.petName))
   end
