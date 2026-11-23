@@ -584,9 +584,10 @@ check(M.prints[#M.prints]:find("Unruly"), "chat: now Unruly")
 ns.db.loyalty.segments[#segs + 1] = { from = 2, to = 3, complete = true, rateSec = 24000 }
 M.advance(300)
 st = LY.Status()
-check(st.level == 2 and st.progress and st.progress > 0.15 and st.progress < 0.18 and st.etaSec and st.etaSec > 1450 and st.etaSec < 1550,
-  ("Unruly: shipped 36,000 wins: ~1/6 after 5 min of 30, ETA ~25 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
-check(LY.Needed(1) == 18000 and LY.Needed(4) == 72000 and LY.Needed(5) == 90000 and LY.Needed(6) == nil, "shipped: 18,000 × level, none past Best Friend")
+check(st.level == 2 and st.progress and st.progress > 0.2 and st.progress < 0.3 and st.etaSec and st.etaSec > 800 and st.etaSec < 950,
+  ("Unruly: your measurement (24,000) comes first: ~25%% after 5 min, ETA ~15 min (%.2f, %s s)"):format(st.progress or -1, tostring(st.etaSec and math.floor(st.etaSec))))
+local n4, src4 = LY.Needed(4)
+check(n4 == 122000 and src4 == "shipped" and LY.Needed(5) == nil and LY.Needed(6) == nil, "shipped table for unmeasured levels; level 5 not known yet")
 -- dismissing the pet makes a gap: that time doesn't count
 local before = LY.Status().summonedSec
 M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(120)
@@ -639,5 +640,40 @@ M.fire("UNIT_PET", "player"); M.advance(8)
 local fresh = ns.db.loyalty.current[key]
 check(fresh.summonedSec < oldSum and fresh.petLevelStart == 12 and not fresh.fromStart, "lower pet level: a new run, not complete")
 check(LY.ExportText():find("combat="), "export shows combat time")
+-- 1.7.4: what you were doing — resting, AFK, mounted, flying — and the experience you and your pet gained
+local akey = (function() for k, r in pairs(ns.db.loyalty.current) do if r.petName == "Gray Bear" then return k end end end)()
+local arun = ns.db.loyalty.current[akey]
+M.xp, M.xpMax, M.petXp, M.petXpMax = 1000, 5000, 200, 3000
+UnitXP = function() return M.xp end
+UnitXPMax = function() return M.xpMax end
+GetPetExperience = function() return M.petXp, M.petXpMax end
+IsResting = function() return M.resting or false end
+UnitIsAFK = function() return M.afk or false end
+IsMounted = function() return M.mounted or false end
+UnitOnTaxi = function() return false end
+M.advance(6)
+local x0 = arun.xp or 0
+M.resting = true; M.advance(60); M.resting = false
+check(arun.restSec >= 55 and arun.restSec <= 65, "resting time counted (" .. arun.restSec .. " s)")
+M.afk = true; M.advance(30); M.afk = false
+check(arun.afkSec >= 25 and arun.afkSec <= 35, "AFK time counted (" .. arun.afkSec .. " s)")
+M.mounted = true; M.advance(20); M.mounted = false
+check(arun.mountSec >= 15 and arun.mountSec <= 25, "mounted time counted")
+M.xp = 1800; M.petXp = 500; M.advance(6)
+check(arun.xp - x0 == 800 and arun.petXp >= 300, "experience gained: you 800, pet 300")
+M.xp, M.xpMax = 4900, 5000; M.advance(6)
+M.xp, M.xpMax = 300, 6000; M.advance(6) -- you levelled up in between
+check(arun.xp - x0 == 800 + 3100 + 400, "experience across a level-up (" .. (arun.xp - x0) .. ")")
+-- dismissed: neither time nor experience counts
+M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(6)
+M.xp = 2300; M.advance(60)
+M.units.pet = { name = "Gray Bear", level = 12, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
+M.fire("UNIT_PET", "player"); M.advance(8)
+check(arun.xp - x0 == 4300, "experience while dismissed is not counted")
+-- the level goes up: the segment and export carry it all
+M.loyalty.name = "Submissive"; M.advance(6)
+local lastSeg = ns.db.loyalty.segments[#ns.db.loyalty.segments]
+check(lastSeg.restSec >= 55 and lastSeg.afkSec >= 25 and lastSeg.xp >= 4300 and lastSeg.petXp >= 300, "segment keeps activity")
+check(LY.ExportText():find("rest=%d+ afk=%d+ mount=%d+ taxi=%d+ xp=%d+ petXp=%d+"), "export shows activity")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

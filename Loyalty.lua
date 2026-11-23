@@ -15,12 +15,12 @@ L.NAMES = { "Rebellious", "Unruly", "Submissive", "Dependable", "Faithful", "Bes
 L.MAX = #L.NAMES
 
 -- Rate-seconds each level takes before the next one: [level] = rate-seconds from the start of that level to the next.
--- Provisional (v1.7.3): 18,000 × level, fitted to Shannon's Hyena (Nov 22): 1>2 18,850 (noisy: negative rate and
--- uncounted fights), 2>3 35,800, 3>4 54,100. Levels 4 and 5 are predictions. At rate 20 that is 15, 30, 45, 60 and
--- 75 minutes. Your own complete measurements don't override these; they are kept for checking them.
+-- Provisional, from Shannon's Hyena (Nov 22, pet level 29): 1>2 18,850 (noisy), 2>3 35,800, 3>4 54,100, 4>5 122,360.
+-- Levels 1-3 fit 18,000 × level (15, 30, 45 min at rate 20); level 4 took 1.7× that, in a stretch with little fighting
+-- (4% of the time vs 19-38%), so the speed may depend on what you do: v1.7.4 records that. Level 5 is not measured yet.
+-- Your own complete measurements come first (L.Needed).
 L.PER_LEVEL = 18000
-L.SHIPPED = {}
-for lv = 1, 5 do L.SHIPPED[lv] = L.PER_LEVEL * lv end
+L.SHIPPED = { 18000, 36000, 54000, 122000 }
 
 local SAMPLE = 5 -- seconds between samples while the pet is out
 
@@ -83,7 +83,40 @@ local function newRun(read, fromStart)
     rateMin = read.rate, rateMax = read.rate, lastRate = read.rate,
     happySec = { 0, 0, 0 }, petLevelStart = ns.pet and ns.pet.level, family = ns.pet and ns.pet.fam,
     petName = ns.pet and ns.pet.name, combatSec = 0,
+    restSec = 0, afkSec = 0, mountSec = 0, taxiSec = 0, xp = 0, petXp = 0,
   }
+end
+
+-- What you were doing (v1.7.4): resting, AFK, mounted, on a flight path; and the experience you and your pet gained.
+-- Level 4>5 took 1.7× the model in a quiet stretch, so these say whether loyalty depends on activity.
+local function flag(fn, ...)
+  if not fn then return false end
+  return try(fn, ...) == true
+end
+
+local function addXp(run, field, lastKey, maxKey, cur, max, count)
+  if type(cur) ~= "number" then return end
+  local last, lastMax = run[lastKey], run[maxKey]
+  if count and type(last) == "number" then
+    local gain = cur - last
+    if gain < 0 and type(lastMax) == "number" then gain = (lastMax - last) + cur end -- a level-up in between
+    if gain > 0 then run[field] = (run[field] or 0) + gain end
+  end
+  run[lastKey], run[maxKey] = cur, max
+end
+
+local function trackActivity(run, dt, count)
+  if count then
+    if flag(IsResting) then run.restSec = (run.restSec or 0) + dt end
+    if flag(UnitIsAFK, "player") then run.afkSec = (run.afkSec or 0) + dt end
+    if flag(IsMounted) then run.mountSec = (run.mountSec or 0) + dt end
+    if flag(UnitOnTaxi, "player") then run.taxiSec = (run.taxiSec or 0) + dt end
+  end
+  addXp(run, "xp", "lastXp", "lastXpMax", UnitXP and try(UnitXP, "player"), UnitXPMax and try(UnitXPMax, "player"), count)
+  if GetPetExperience then
+    local cur, max = try(GetPetExperience)
+    addXp(run, "petXp", "lastPetXp", "lastPetXpMax", cur, max, count)
+  end
 end
 
 -- A pet that has just been tamed starts its first level now: that level is measured from its start.
@@ -150,6 +183,7 @@ function L.Sample()
   elseif dt ~= -1 then
     run.gaps = (run.gaps or 0) + 1
   end
+  if dt ~= -1 then trackActivity(run, dt, continuous) end
   run.lastSample = now
   if read.rate then
     run.lastRate = read.rate
@@ -168,6 +202,8 @@ function L.Sample()
         rateMin = run.rateMin, rateMax = run.rateMax, happySec = run.happySec,
         petLevelStart = run.petLevelStart, petLevelEnd = run.petLevelEnd, family = run.family, petName = run.petName,
         wallSec = now - run.started, ended = now, combatSec = run.combatSec or 0,
+        restSec = run.restSec or 0, afkSec = run.afkSec or 0, mountSec = run.mountSec or 0, taxiSec = run.taxiSec or 0,
+        xp = run.xp or 0, petXp = run.petXp or 0,
       })
       ns.Print(("Loyalty: %s is now |cffffd100%s|r (%d/%d)."):format(run.petName or "your pet",
         L.NAMES[read.level] or tostring(read.name), read.level, L.MAX))
@@ -182,12 +218,12 @@ end
 -- ------------------------------------------------------------------ estimates
 -- Rate-seconds a level takes: shipped value, else the average of your complete segments for that level.
 function L.Needed(level)
-  if L.SHIPPED[level] then return L.SHIPPED[level], "shipped" end
   local sum, n = 0, 0
   for _, s in ipairs(ns.db and ns.db.loyalty and ns.db.loyalty.segments or {}) do
     if s.complete and s.from == level and s.rateSec and s.rateSec > 0 then sum, n = sum + s.rateSec, n + 1 end
   end
   if n > 0 then return sum / n, "measured", n end
+  if L.SHIPPED[level] then return L.SHIPPED[level], "shipped" end
   return nil
 end
 
@@ -244,8 +280,9 @@ function L.ExportText()
   local lines = { "PetTrainingPlus loyalty v1 " .. date("%Y-%m-%d %H:%M") }
   for _, s in ipairs(d.segments or {}) do
     local h = s.happySec or {}
-    lines[#lines + 1] = ("seg %d>%d complete=%s rateSec=%d summoned=%d wall=%d combat=%d samples=%d gaps=%d rate=%s-%s happy=%d/%d/%d petLv=%s-%s fam=%s pet=%s"):format(
-      s.from, s.to, tostring(s.complete), s.rateSec or 0, s.summonedSec or 0, s.wallSec or 0, s.combatSec or 0, s.samples or 0, s.gaps or 0,
+    lines[#lines + 1] = ("seg %d>%d complete=%s rateSec=%d summoned=%d wall=%d combat=%d rest=%d afk=%d mount=%d taxi=%d xp=%d petXp=%d samples=%d gaps=%d rate=%s-%s happy=%d/%d/%d petLv=%s-%s fam=%s pet=%s"):format(
+      s.from, s.to, tostring(s.complete), s.rateSec or 0, s.summonedSec or 0, s.wallSec or 0, s.combatSec or 0,
+      s.restSec or 0, s.afkSec or 0, s.mountSec or 0, s.taxiSec or 0, s.xp or 0, s.petXp or 0, s.samples or 0, s.gaps or 0,
       tostring(s.rateMin), tostring(s.rateMax), h[1] or 0, h[2] or 0, h[3] or 0, tostring(s.petLevelStart),
       tostring(s.petLevelEnd), tostring(s.family), tostring(s.petName))
   end
