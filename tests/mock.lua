@@ -102,6 +102,10 @@ function Frame:CreateFontString()
   table.insert(self._regions, t)
   return t
 end
+function Frame:SetColorTexture(r, g, b, a) self._color = { r, g, b, a } end
+function Frame:GetColorTexture() local c = rawget(self, "_color") or {}; return c[1], c[2], c[3], c[4] end
+function Frame:SetJustifyH(j) self._justifyH = j end
+function Frame:GetJustifyH() return rawget(self, "_justifyH") end
 function Frame:SetText(t) self._text = t end
 function Frame:GetText() return self._text end
 function Frame:GetStringWidth() return #(self._text or "") * 6 end

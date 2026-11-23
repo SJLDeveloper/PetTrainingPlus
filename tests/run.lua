@@ -607,10 +607,34 @@ check(PetTrainingPlusLoyaltyExport and PetTrainingPlusLoyaltyExport:IsShown(), "
 SlashCmdList.PETTRAININGPLUS("loyalty")
 check(M.prints[#M.prints]:find("level%-ups recorded"), "/ptp loyalty prints a report")
 ns.UI.Show(); ns.UI.Refresh()
-check(ns.UI.frame.petbar.info:GetText():find("Unruly") and ns.UI.frame.petbar.info:GetText():find("to Submissive"), "pet bar: " .. ns.UI.frame.petbar.info:GetText())
-local before = ns.UI.frame.petbar.info:GetText()
+-- 1.8.0 loyalty bar: the countdown lives on a bar on the pet line; the line itself keeps only the loyalty level
+local PB = ns.UI.frame.petbar
+local LB = PB.loy
+check(PB.info:GetText():find("Unruly|r 2/6", 1, true) and not PB.info:GetText():find("to Submissive") and not PB.info:GetText():find("gaining"),
+  "pet line: level only: " .. PB.info:GetText())
+check(LB:IsShown() and LB.state == "gaining" and LB.text:GetText():find("to Submissive"), "loyalty bar: " .. tostring(LB.text:GetText()))
+check(LB.text:GetJustifyH() == "CENTER", "loyalty bar text is centred")
+local p0, t0 = LB.progress, LB.text:GetText()
 M.advance(180)
-check(ns.UI.frame.petbar.info:GetText() ~= before, "pet bar countdown moves on its own: " .. ns.UI.frame.petbar.info:GetText())
+check(LB.text:GetText() ~= t0 and LB.progress > p0, ("loyalty bar fills and counts down on its own (%.3f > %.3f, %s)"):format(LB.progress, p0, LB.text:GetText()))
+check(LB.fill:GetWidth() > 1 and math.abs(LB.fill:GetWidth() - (LB:GetWidth() - 2) * LB.progress) < 1, "fill width follows progress")
+-- through a fight the game hides loyalty: the bar keeps going from the last reading
+M.combat = true
+ns.UI.Refresh(); M.advance(10)
+local pc = LB.progress
+M.advance(10)
+check(LB:IsShown() and LB.progress > pc, "loyalty bar keeps running in combat")
+M.combat = false; M.advance(6)
+-- the last 5 seconds: gold, "Imminent!"
+local eta = LY.Status().etaSec
+M.advance(eta - 3)
+check(LB.state == "imminent" and LB.text:GetText() == "Loyalty Increase Imminent!" and LB.progress == 1, "imminent: " .. tostring(LB.text:GetText()))
+local fr, fg, fb = LB.fill:GetColorTexture()
+check(fr == 1 and fg > .7 and fb < .2, "imminent: the bar turns gold")
+-- unhappy: losing
+M.loyalty.rate = -10; M.fire("UNIT_HAPPINESS", "pet"); M.advance(1)
+check(LB.state == "losing" and LB.text:GetText():find("Losing"), "losing: " .. tostring(LB.text:GetText()))
+M.loyalty.rate = 20; M.fire("UNIT_HAPPINESS", "pet"); M.advance(1)
 -- 1.7.2: time in combat counts, at the rate seen before the fight
 M.units.pet = { name = "Gray Bear", level = 21, guid = "Pet-0-1-2-3-165189-0400B0", fam = 4, famName = "Bear" }
 M.fire("UNIT_PET", "player"); M.advance(8)
@@ -647,6 +671,9 @@ M.units.pet = { name = "Gray Bear", level = 12, guid = "Pet-0-1-2-3-165189-0400B
 M.fire("UNIT_PET", "player"); M.advance(8)
 local fresh = ns.db.loyalty.current[key]
 check(fresh.summonedSec < oldSum and fresh.petLevelStart == 12 and not fresh.fromStart, "lower pet level: a new run, not complete")
+ns.UI.Refresh(); M.advance(0.5)
+check(ns.UI.frame.petbar.loy.state == "unknown" and ns.UI.frame.petbar.loy.text:GetText():find("estimate from the next level"),
+  "joined partway through a level: bar says when an estimate comes")
 check(LY.ExportText():find("combat="), "export shows combat time")
 -- 1.7.4: what you were doing — resting, AFK, mounted, flying — and the experience you and your pet gained
 local akey = (function() for k, r in pairs(ns.db.loyalty.current) do if r.petName == "Gray Bear" then return k end end end)()
@@ -663,9 +690,9 @@ M.advance(6)
 local x0 = arun.xp or 0
 local r0, s0 = arun.rateSec, arun.summonedSec
 ns.UI.Show(); ns.UI.Refresh(); M.advance(0.3)
-check(not ns.UI.frame.petbar.info:GetText():find("paused"), "pet bar: not resting yet")
+check(ns.UI.frame.petbar.loy.state ~= "paused", "loyalty bar: not resting yet")
 M.resting = true; M.fire("PLAYER_UPDATE_RESTING"); M.advance(0.5)
-check(ns.UI.frame.petbar.info:GetText():find("paused: resting"), "pet bar updates on entering an inn, no other refresh: " .. ns.UI.frame.petbar.info:GetText())
+check(ns.UI.frame.petbar.loy.state == "paused" and ns.UI.frame.petbar.loy.text:GetText():find("Paused while resting"), "loyalty bar pauses on entering an inn, no other refresh: " .. tostring(ns.UI.frame.petbar.loy.text:GetText()))
 M.advance(30)
 check(LY.Status().resting and LY.Status().etaSec == nil, "resting: no ETA (paused)")
 M.advance(30); M.resting = false
@@ -673,7 +700,7 @@ check(math.abs(arun.rateSec - r0) < 1 and arun.summonedSec - s0 >= 55, "resting:
 M.combat = true; M.resting = true; M.advance(20); M.combat = false; M.resting = false; M.advance(1)
 check(math.abs(arun.rateSec - r0) < 1 + 20 * 2, "resting in combat doesn't build loyalty either")
 M.fire("PLAYER_UPDATE_RESTING"); M.advance(0.5)
-check(not ns.UI.frame.petbar.info:GetText():find("paused"), "pet bar updates on leaving the inn")
+check(ns.UI.frame.petbar.loy.state ~= "paused", "loyalty bar resumes on leaving the inn")
 M.advance(10)
 check(arun.rateSec - r0 > 150, "out of the inn: loyalty counts again")
 check(arun.restSec >= 75 and arun.restSec <= 85, "resting time counted (" .. arun.restSec .. " s)")
@@ -697,5 +724,13 @@ M.loyalty.name = "Submissive"; M.advance(6)
 local lastSeg = ns.db.loyalty.segments[#ns.db.loyalty.segments]
 check(lastSeg.restSec >= 55 and lastSeg.afkSec >= 25 and lastSeg.xp >= 4300 and lastSeg.petXp >= 300, "segment keeps activity")
 check(LY.ExportText():find("rest=%d+ afk=%d+ mount=%d+ taxi=%d+ xp=%d+ petXp=%d+ method=%d"), "export shows activity and method")
+-- Best Friend: no bar, no timer
+M.loyalty.name = "Best Friend"; M.fire("UNIT_HAPPINESS", "pet"); M.advance(6)
+ns.UI.Refresh(); M.advance(0.5)
+check(not ns.UI.frame.petbar.loy:IsShown(), "Best Friend: the loyalty bar is gone")
+check(ns.UI.frame.petbar.info:GetText():find("Best Friend|r 6/6", 1, true) and not ns.UI.frame.petbar.info:GetText():find("to "), "Best Friend: just the level: " .. ns.UI.frame.petbar.info:GetText())
+-- no pet: no bar
+M.units.pet = nil; M.fire("UNIT_PET", "player"); M.advance(2); ns.UI.Refresh(); M.advance(0.5)
+check(not ns.UI.frame.petbar.loy:IsShown(), "no pet: no loyalty bar")
 check(#M.errors == 0, "no errors")
 print(M.failed and "SOME TESTS FAILED" or "ALL PASSED")

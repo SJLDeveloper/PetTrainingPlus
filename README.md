@@ -24,8 +24,9 @@ A replacement for the hunter **Beast Training** window in WoW: Forever (Interfac
   **View in Bestiary**, to open that ability in Forever Bestiary (Pet Hunter) exactly as if you had clicked it in its
   Abilities tab: every rank and the beasts that teach it. Needs Forever Bestiary (Pet Hunter) loaded.
 
-- **Loyalty.** The pet bar shows your pet's loyalty level (Rebellious 1/6 … Best Friend 6/6) and whether it is gaining
-  or losing loyalty, and an estimate of the time to the next level. The game hides loyalty points, so the estimates
+- **Loyalty.** The pet bar shows your pet's loyalty level (Rebellious 1/6 … Best Friend 6/6) and a progress bar that
+  fills towards the next level with a countdown on it. It turns gold with "Loyalty Increase Imminent!" in the last few
+  seconds, pauses while you rest, turns red if the pet is losing loyalty, and disappears at Best Friend. The game hides loyalty points, so the estimates
   come from measured play and are still being tested: at a normal rate, each level takes about 15 minutes more than
   the last (15, 30, 45, 60, 75), and loyalty doesn't grow while you rest in a city or inn, so the estimate pauses
   there. Pet Training+ records your own levels too and uses them for your estimates once it has them.

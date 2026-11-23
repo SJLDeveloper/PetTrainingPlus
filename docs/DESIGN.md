@@ -1,6 +1,6 @@
 # WoW Pet Training+ design doc
 
-**Current version: 1.7.7** · last updated 2026-11-23.
+**Current version: 1.8.0** · last updated 2026-11-23.
 
 This document records how the addon works and why it was built that way. It is updated with every push (see
 [Maintenance](#maintenance)). When code and this doc disagree, trust the code, then fix the doc.
@@ -479,7 +479,7 @@ each level's threshold, then ship those numbers.
 - `L.Needed(level)` (v1.7.4 order): the average `rateSec` of your complete segments for that level counted the current way (`method == L.METHOD`, v1.7.6), else `L.SHIPPED[level]`. (v1.7.3 had the shipped value first.) The complete segments are
   for that level. `L.Status()` gives the progress and `etaSec = (need − rateSec) / currentRate`.
 - Display:
-  - pet bar: "Unruly 2/6 (gaining)", plus "~N to Submissive" once an estimate exists;
+  - pet bar: the loyalty level on the pet line ("Unruly 2/6") and the **loyalty bar** (v1.8.0, below);
   - `/ptp loyalty`: a report;
   - `/ptp loyalty export`: a copyable text frame (`PetTrainingPlusLoyaltyExport`).
 
@@ -519,6 +519,23 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 
 - Size: 790×560 at scale 1.3 (`/ptp scale 0.6–2`).
 - Tabs: **Skills** and **Log**.
+- **Loyalty bar** (v1.8.0, `PetTrainingPlusLoyaltyBar`, `petbar.loy`): sits on the pet bar's top line, filling the gap
+  between the pet's details and the TP count (anchored LEFT to `info`'s right, RIGHT to `tp`'s left), so it is centred
+  in that line; its text is centred on it. A fill texture grows behind the text.
+  - `UI.SetLoyalty(st)` stores a snapshot of `L.Status()` with `GetTime()`; `UI.DrawLoyaltyBar()` runs every 0.25 s
+    while the bar is shown and moves the fill and countdown on from the snapshot, so they run smoothly between the 5 s
+    samples. In combat (`L.Status()` is nil) the snapshot is kept and keeps running.
+  - States (`UI.LoyaltyBarState`, colours in `UI.LOYALTY_COLORS`):
+
+    | State | When | Text | Bar |
+    |---|---|---|---|
+    | gaining | rate > 0, estimate known | "~42 min to Faithful" (seconds under 90 s) | green, fills with progress |
+    | imminent | ETA ≤ `UI.IMMINENT_SEC` (5 s), including overdue | "Loyalty Increase Imminent!" (dark text) | gold, full |
+    | paused | resting (city or inn), or rate 0 | "Paused while resting (city or inn)" / "Not gaining loyalty" | grey, held |
+    | losing | rate < 0 | "Losing loyalty: your pet is unhappy" | red |
+    | unknown | gaining, but joined partway through the level | "Gaining loyalty · estimate from the next level on" | empty |
+    | (hidden) | Best Friend, no pet | — | — |
+  - The pet line keeps only the loyalty level; "(gaining)" and the "~N to …" text moved onto the bar.
 - **Pet bar:** portrait, name, level, family, loyalty, free/total/spent TP, and "Tamed from …" or a hint to use
   `/ptp origin`.
 - **Pet toggle** (v1.2.0): a large button fixed above the skill list (it doesn't scroll). `opts.petOnly`, default on,
@@ -556,14 +573,15 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 
 ## 13. Testing
 
-- `lua5.1 tests/run.lua`. 210 checks at v1.7.7; all must pass before a push.
+- `lua5.1 tests/run.lua`. 221 checks at v1.8.0; all must pass before a push.
 - `tests/mock.lua` is a small WoW API mock:
   - frames, with geometry, strata, alpha, scripts and `tickOnUpdate`;
   - simulated timers (`M.advance(sec)`) and events (`M.fire`);
   - trainer services with a 7-row visible window and a scroll offset;
   - `SelectTrainerService`, `issecurevariable`;
   - units, the pet spellbook, TP;
-  - `C_PetInfo` loyalty and happiness.
+  - `C_PetInfo` loyalty and happiness;
+  - texture colours (`Get/SetColorTexture`) and text alignment (`Get/SetJustifyH`).
 - Mock quirks to remember:
   - Missing keys return no-op functions, so the code uses `rawget` and `type(x) == "table"` checks.
   - `x and unpack()` truncates multiple returns.
@@ -601,12 +619,15 @@ Shannon's Hyena (fresh tame Nov 22, Best Friend Nov 23; pet level 29 for levels 
 | 1.7.5 | Remove Cobra Reflexes (commented stub, like Harass) | not available in Forever; the v1.1.1 entry was wrong |
 | 1.7.6 | Resting time (city/inn) no longer counts toward loyalty; ship 18,000 × level for levels 1–5; only segments counted this way feed estimates | 5 → 6 fits within 4% without its resting time; Shannon confirmed lots of resting on the 70% outlier |
 | 1.7.7 | Sample loyalty on `PLAYER_UPDATE_RESTING` | the pause already worked (v1.7.6) but showed up to 5 s late; Shannon asked for the estimate to pause while resting |
+| 1.8.0 | Loyalty countdown as a bar centred on the pet line, filling behind its text; gold "Loyalty Increase Imminent!" in the last 5 s; hidden at Best Friend | Shannon's request, ahead of a possible release |
 | — | Kept in its own public repo, used only for this project | Shannon's explicit instruction |
 
 ---
 
 ## 15. Open items
 
+- In-game check of the v1.8.0 loyalty bar: that it fits between the pet details and the TP count with a long pet
+  name, and how the gold state reads.
 - In-game checks still to report back: the v1.5.0 framed border spacing, v1.5.1 ESC linking, v1.6.x colours and stripes,
   and the v1.7.0 recorder.
 - Loyalty: test the v1.7.6 model with Shannon's second fresh tame (Nov 23), level by level; ideally include a long

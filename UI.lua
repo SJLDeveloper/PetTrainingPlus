@@ -779,6 +779,73 @@ function UI.RefreshLog()
 end
 
 -- ------------------------------------------------------------------ pet bar and footer
+-- Loyalty bar (v1.8.0). UI.SetLoyalty keeps a snapshot of L.Status() and the time it was taken; UI.DrawLoyaltyBar
+-- (every 0.25 s while shown) moves the fill and the countdown on from it, so they run smoothly between the 5-second
+-- samples and through fights.
+UI.IMMINENT_SEC = 5
+UI.LOYALTY_COLORS = {
+  gaining = { .20, .52, .22 },
+  imminent = { 1, .78, .10 },
+  paused = { .38, .38, .38 },
+  losing = { .62, .14, .12 },
+  unknown = { .20, .30, .22 },
+}
+local loySnap
+
+function UI.SetLoyalty(st)
+  if st and st.level then
+    loySnap = { st = st, t = GetTime() }
+  else
+    loySnap = nil
+  end
+  UI.DrawLoyaltyBar()
+end
+
+-- What the bar shows now: state key, fill (0-1), text. nil means no bar.
+function UI.LoyaltyBarState()
+  local s = loySnap
+  local LY = ns.Loyalty
+  if not s or not LY then return nil end
+  local st = s.st
+  if not st.level or st.level >= LY.MAX then return nil end -- Best Friend: nothing left to show
+  local nextName = LY.NAMES[st.level + 1] or "the next level"
+  local prog, eta = st.progress, st.etaSec
+  local rate = st.rate or 0
+  if rate < 0 then
+    return "losing", prog or 0, "Losing loyalty: your pet is unhappy"
+  end
+  if st.resting and rate > 0 then
+    return "paused", prog or 0, "Paused while resting (city or inn)"
+  end
+  if rate <= 0 then return "paused", prog or 0, "Not gaining loyalty" end
+  if not prog or not eta then
+    return "unknown", 0, "Gaining loyalty · estimate from the next level on"
+  end
+  local el = GetTime() - s.t
+  eta = math.max(0, eta - el)
+  if prog < 1 and st.etaSec > 0 then prog = prog + (1 - prog) * math.min(1, el / st.etaSec) end
+  if eta <= UI.IMMINENT_SEC then return "imminent", 1, "Loyalty Increase Imminent!" end
+  return "gaining", math.min(prog, 1), ("~%s to %s"):format(LY.FormatDuration(math.floor(eta + 0.5)), nextName)
+end
+
+function UI.DrawLoyaltyBar()
+  local b = f and f.petbar
+  local lb = b and b.loy
+  if not lb then return end
+  local key, prog, text = UI.LoyaltyBarState()
+  if not key then lb:Hide(); return end
+  lb:Show()
+  lb.state = key
+  lb.progress = prog
+  local c = UI.LOYALTY_COLORS[key]
+  lb.fill:SetColorTexture(c[1], c[2], c[3], 1)
+  local w = (lb:GetWidth() or 0) - 2
+  lb.fill:SetWidth(math.max(1, w * prog))
+  lb.fill:SetShown(prog > 0)
+  lb.text:SetText(text)
+  if key == "imminent" then lb.text:SetTextColor(.12, .08, 0) else lb.text:SetTextColor(1, 1, 1) end
+end
+
 function UI.RefreshPet()
   if not f then return end
   local b = f.petbar
@@ -792,14 +859,10 @@ function UI.RefreshPet()
     if ly and ly.level then
       local LN = ns.Loyalty.NAMES
       info = info .. ("  ·  |cffffd100%s|r %d/%d"):format(LN[ly.level] or tostring(ly.name), ly.level, ns.Loyalty.MAX)
-      if ly.rate and ly.rate > 0 and ly.resting and ly.level < ns.Loyalty.MAX then info = info .. " |cffaaaaaa(paused: resting)|r"
-      elseif ly.rate and ly.rate > 0 then info = info .. " |cff9cff7a(gaining)|r"
-      elseif ly.rate and ly.rate < 0 then info = info .. " |cffff6060(losing)|r" end
-      if ly.etaSec and LN[ly.level + 1] then
-        info = info .. ("  ·  ~%s to %s"):format(ns.Loyalty.FormatDuration(ly.etaSec), LN[ly.level + 1])
-      end
     end
     b.info:SetText(info)
+    -- in combat the game hides loyalty: keep the bar running from what was last read
+    if ly or not ns.InCombat() then UI.SetLoyalty(ly) end
     if p.tpFree then
       local c = p.tpFree < 0 and "|cffff5050" or "|cff9cff7a"
       b.tp:SetText(c .. p.tpFree .. "|r |cffaaaaaaTP free|r")
@@ -813,6 +876,7 @@ function UI.RefreshPet()
       (whereText(o.where) and (" in " .. whereText(o.where)) or "")) or "|cff888888Origin unknown (tamed before Pet Training+) — target the same kind of beast and type /ptp origin|r")
   else
     b.portrait:Hide()
+    UI.SetLoyalty(nil)
     b.name:SetText("|cffaaaaaaNo pet summoned|r")
     b.info:SetText("Showing what you know. Summon a pet to see what it has and can learn.")
     b.tp:SetText("")
@@ -1278,6 +1342,29 @@ function UI.Init()
   b.tp:SetPoint("TOPRIGHT", -10, -7)
   b.tpsub = fs(b, "GameFontDisableSmall", "RIGHT")
   b.tpsub:SetPoint("BOTTOMRIGHT", -10, 7)
+
+  -- loyalty bar (v1.8.0): fills the gap on the top line between the pet's details and the TP count, so it sits centred
+  -- in that line. The fill grows behind centred text; it turns gold when the next level is 5 s away, and is hidden at
+  -- Best Friend.
+  local lb = CreateFrame("Frame", "PetTrainingPlusLoyaltyBar", b, "BackdropTemplate")
+  lb:SetHeight(16)
+  lb:SetPoint("LEFT", b.info, "RIGHT", 16, 0)
+  lb:SetPoint("RIGHT", b.tp, "LEFT", -16, 0)
+  backdrop(lb, { .03, .03, .03, .9 }, { .35, .28, .14, .9 })
+  lb.fill = tex(lb, "ARTWORK", 1, 1, 1, 1)
+  lb.fill:SetPoint("TOPLEFT", 1, -1)
+  lb.fill:SetPoint("BOTTOMLEFT", 1, 1)
+  lb.fill:SetWidth(1)
+  lb.text = fs(lb, "GameFontHighlightSmall", "CENTER")
+  lb.text:SetPoint("CENTER", 0, 0)
+  lb:Hide()
+  lb:SetScript("OnUpdate", function(self, el)
+    self.acc = (rawget(self, "acc") or 0) + el
+    if self.acc < 0.25 then return end
+    self.acc = 0
+    UI.DrawLoyaltyBar()
+  end)
+  b.loy = lb
 
   -- tabs
   f.tabSkills = textButton(f, "Skills", 90, 22)
